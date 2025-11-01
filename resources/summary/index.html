@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>群聊AI总结</title>
+  <link rel="stylesheet" href="{{pluResPath}}summary/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="icon">🤖</div>
+      <h1 class="title">群聊 AI 总结</h1>
+      <div class="subtitle">由 {{provider}} 生成</div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-item">
+        <span class="label">群名</span>
+        <span class="value">{{groupName}}</span>
+      </div>
+      <div class="info-item">
+        <span class="label">时间范围</span>
+        <span class="value">{{timeRange}}</span>
+      </div>
+      <div class="info-item">
+        <span class="label">消息数</span>
+        <span class="value">{{messageCount}}</span>
+      </div>
+      <div class="info-item">
+        <span class="label">生成时间</span>
+        <span class="value">{{createTime}}</span>
+      </div>
+    </div>
+
+    <div class="summary-content">
+      {{summaryHtml}}
+    </div>
+
+    <div class="footer">
+      <p>本总结由 AI 生成，仅供参考</p>
+    </div>
+  </div>
+</body>
+</html>

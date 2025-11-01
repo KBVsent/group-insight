@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>群聊词云</title>
+  <link rel="stylesheet" href="{{pluResPath}}wordcloud/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">群聊词云</h1>
+      <div class="info">
+        <span class="group-name">{{groupName}}</span>
+        <span class="time-range">{{timeRange}}</span>
+        <span class="message-count">消息数: {{messageCount}}</span>
+      </div>
+    </div>
+
+    <div class="wordcloud-container">
+      <canvas id="wordcloud"></canvas>
+    </div>
+
+    <div class="footer">
+      <p>生成时间: {{createTime}}</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.min.js"></script>
+  <script>
+    // 词频数据
+    const wordList = {{{wordListJson}}};
+
+    // 生成词云
+    const canvas = document.getElementById('wordcloud');
+    const container = document.querySelector('.wordcloud-container');
+
+    // 设置 canvas 尺寸
+    canvas.width = {{width}};
+    canvas.height = {{height}};
+
+    // 配置词云
+    WordCloud(canvas, {
+      list: wordList,
+      gridSize: Math.round(16 * canvas.width / 1024),
+      weightFactor: function (size) {
+        return Math.pow(size, 1.2) * canvas.width / 1024;
+      },
+      fontFamily: 'Microsoft YaHei, SimHei, sans-serif',
+      color: function () {
+        // 随机颜色
+        const colors = [
+          '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
+          '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#5470c6'
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+      },
+      rotateRatio: 0.3,
+      rotationSteps: 2,
+      backgroundColor: '{{backgroundColor}}',
+      minSize: 12,
+      drawOutOfBound: false,
+      shrinkToFit: true
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+# 群聊信息管理插件配置文件
+
+groupManager:
+  # 消息保留天数
+  retentionDays: 7
+
+  # 艾特记录保留时间（小时）
+  atRetentionHours: 24
+
+  # AI 配置
+  ai:
+    # AI 提供商: claude / openai / qwen / other
+    provider: 'claude'
+
+    # API Key (请在 config/config/group-manager.yaml 中配置)
+    apiKey: ''
+
+    # 模型名称
+    model: 'claude-3-5-sonnet-20241022'
+
+    # API Base URL (可选，用于自定义 API 端点)
+    baseURL: ''
+
+    # 超时时间（毫秒）
+    timeout: 60000
+
+    # 最大 Token 数
+    maxTokens: 2000
+
+  # 词云配置
+  wordCloud:
+    # 最多显示词数
+    maxWords: 100
+
+    # 最短词长度
+    minLength: 2
+
+    # 最小词频
+    minFrequency: 2
+
+    # 画布尺寸
+    width: 1200
+    height: 800
+
+    # 背景颜色
+    backgroundColor: '#ffffff'
+
+  # 消息收集配置
+  messageCollection:
+    # 是否启用消息收集
+    enabled: true
+
+    # 是否收集图片
+    collectImages: false
+
+    # 是否收集表情
+    collectFaces: false
+
+    # 最大消息长度（超过将被截断）
+    maxMessageLength: 500
