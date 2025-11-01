@@ -102,7 +102,7 @@ export class GroupManager extends plugin {
       task: {
         name: '每小时群聊总结',
         cron: '0 * * * *',  // 每小时整点执行
-        fnc: 'scheduledSummary',
+        fnc: this.scheduledSummary.bind(this),  // 绑定函数引用
         log: true
       }
     })
