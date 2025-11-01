@@ -61,12 +61,12 @@ export default class WordCloudGenerator {
         width,
         height,
         backgroundColor,
-        pluResPath: `${process.cwd()}/plugins/group-manager/resources/`
+        pluResPath: `${process.cwd()}/plugins/group-insight/resources/`
       }
 
       // 渲染模板
       const img = await puppeteer.screenshot('group-manager-wordcloud', {
-        tplFile: `${process.cwd()}/plugins/group-manager/resources/wordcloud/index.html`,
+        tplFile: `${process.cwd()}/plugins/group-insight/resources/wordcloud/index.html`,
         ...templateData
       })
 
