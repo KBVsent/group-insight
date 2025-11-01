@@ -41,9 +41,9 @@ groupManager:
     # 最小词频
     minFrequency: 2
 
-    # 画布尺寸（基础显示尺寸，实际渲染会应用 3x DPI）
-    width: 1200
-    height: 800
+    # 画布尺寸（配合 2x DPI 渲染，实际输出 2400x1600）
+    width: 1800
+    height: 1200
 
     # 背景颜色
     backgroundColor: '#ffffff'
