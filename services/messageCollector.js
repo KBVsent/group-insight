@@ -70,7 +70,12 @@ export default class MessageCollector {
       } else if (msg.type === 'at') {
         atUsers.push(msg.qq)
       } else if (msg.type === 'image' && this.collectImages) {
-        images.push(msg.url)
+        // 图片可能有不同的字段：url, file
+        const imgUrl = msg.url || msg.file
+        if (imgUrl) {
+          images.push(imgUrl)
+          logger.debug(`[群聊管理] 收集图片: ${imgUrl}`)
+        }
       } else if (msg.type === 'face' && this.collectFaces) {
         faces.push(msg.id)
       }
@@ -159,6 +164,7 @@ export default class MessageCollector {
         messageId: replyMessageId
       }
 
+      logger.debug(`[群聊管理] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${message.faces.length}`)
       await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
     }
   }

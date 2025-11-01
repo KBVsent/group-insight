@@ -16,7 +16,7 @@ groupManager:
     apiKey: ''
 
     # 模型名称
-    model: 'claude-3-5-sonnet-20241022'
+    model: 'claude-haiku-4-5'
 
     # API Base URL (可选，用于自定义 API 端点)
     baseURL: ''

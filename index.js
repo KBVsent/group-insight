@@ -172,11 +172,14 @@ export class GroupManager extends plugin {
 
       // 添加图片
       if (record.images && record.images.length > 0) {
+        logger.debug(`[群聊管理] 构建消息 - 图片数: ${record.images.length}`)
         for (const imgUrl of record.images) {
+          logger.debug(`[群聊管理] 添加图片: ${imgUrl}`)
           msg.push(segment.image(imgUrl))
         }
       }
 
+      logger.debug(`[群聊管理] 最终消息段数: ${msg.length}`)
       msgList.push({
         message: msg,
         user_id: record.user_id,
