@@ -98,14 +98,16 @@ export class GroupManager extends plugin {
           fnc: 'clearAllAtRecords',
           permission: 'master'
         }
-      ],
-      task: {
-        name: '每小时群聊总结',
-        cron: '0 * * * *',  // 每小时整点执行
-        fnc: this.scheduledSummary.bind(this),  // 绑定函数引用
-        log: true
-      }
+      ]
     })
+
+    // 在 super() 之后设置定时任务
+    this.task = {
+      name: '每小时群聊总结',
+      cron: '0 * * * *',  // 每小时整点执行
+      fnc: () => this.scheduledSummary(),  // 使用箭头函数
+      log: true
+    }
   }
 
   /**
