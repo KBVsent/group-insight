@@ -38,7 +38,7 @@ export default class TextProcessor {
       logger.info('[群聊管理] 文本处理器初始化成功')
     } catch (err) {
       logger.error(`[群聊管理] 文本处理器初始化失败: ${err}`)
-      logger.warn('[群聊管理] 请运行: cd plugins/group-manager && pnpm install')
+      logger.warn('[群聊管理] 请运行: cd plugins/group-insight && pnpm install')
       this.initialized = false
     }
   }

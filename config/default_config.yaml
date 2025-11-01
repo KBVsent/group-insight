@@ -12,7 +12,7 @@ groupManager:
     # AI 提供商: claude / openai / qwen / other
     provider: 'claude'
 
-    # API Key (请在 config/config/group-manager.yaml 中配置)
+    # API Key (请在 config/config/group-insight.yaml 中配置)
     apiKey: ''
 
     # 模型名称

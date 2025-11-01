@@ -65,7 +65,7 @@ export default class WordCloudGenerator {
       }
 
       // 渲染模板
-      const img = await puppeteer.screenshot('group-manager-wordcloud', {
+      const img = await puppeteer.screenshot('group-insight-wordcloud', {
         tplFile: `${process.cwd()}/plugins/group-insight/resources/wordcloud/index.html`,
         ...templateData
       })

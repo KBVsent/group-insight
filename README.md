@@ -31,7 +31,7 @@
 
 ### 1. 进入插件目录
 ```bash
-cd plugins/group-manager
+cd plugins/group-insight
 ```
 
 ### 2. 安装依赖
@@ -47,10 +47,10 @@ npm install
 
 复制配置示例文件：
 ```bash
-cp config/config.example.yaml ../../config/config/group-manager.yaml
+cp config/config.example.yaml ../../config/config/group-insight.yaml
 ```
 
-编辑配置文件 `config/config/group-manager.yaml`：
+编辑配置文件 `config/config/group-insight.yaml`：
 ```yaml
 groupManager:
   ai:
@@ -117,7 +117,7 @@ node .
 
 ### 完整配置示例
 
-在 `config/config/group-manager.yaml` 中可以自定义以下配置：
+在 `config/config/group-insight.yaml` 中可以自定义以下配置：
 
 ```yaml
 groupManager:
@@ -196,7 +196,7 @@ groupManager:
 
 先安装 OpenAI SDK：
 ```bash
-cd plugins/group-manager
+cd plugins/group-insight
 pnpm add openai
 ```
 

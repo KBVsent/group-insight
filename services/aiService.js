@@ -24,7 +24,7 @@ export default class AIService {
    */
   async init() {
     if (!this.apiKey) {
-      logger.warn('[群聊管理] AI API Key 未配置，请在 config/config/group-manager.yaml 中配置')
+      logger.warn('[群聊管理] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
       return false
     }
 
@@ -66,7 +66,7 @@ export default class AIService {
       this.model = this.model || 'claude-3-5-sonnet-20241022'
     } catch (err) {
       logger.error('[群聊管理] @anthropic-ai/sdk 未安装')
-      logger.warn('[群聊管理] 请运行: cd plugins/group-manager && pnpm install')
+      logger.warn('[群聊管理] 请运行: cd plugins/group-insight && pnpm install')
       throw err
     }
   }
@@ -88,7 +88,7 @@ export default class AIService {
       this.model = this.model || 'gpt-4o'
     } catch (err) {
       logger.error('[群聊管理] openai 未安装')
-      logger.warn('[群聊管理] 请运行: cd plugins/group-manager && pnpm add openai')
+      logger.warn('[群聊管理] 请运行: cd plugins/group-insight && pnpm add openai')
       throw err
     }
   }

@@ -24,7 +24,7 @@ const __dirname = dirname(__filename)
 // 加载配置
 async function loadConfig() {
   const defaultConfigPath = join(__dirname, 'config/default_config.yaml')
-  const userConfigPath = join(process.cwd(), 'config/config/group-manager.yaml')
+  const userConfigPath = join(process.cwd(), 'config/config/group-insight.yaml')
 
   let config = {}
 
@@ -154,7 +154,7 @@ export class GroupManager extends plugin {
 
       // 添加文本
       if (record.message) {
-        msg.push(segment.text(record.message))
+        msg.push(record.message)
       }
 
       // 添加表情
@@ -340,11 +340,11 @@ export class GroupManager extends plugin {
         messageCount: options.messageCount,
         createTime: moment().format('YYYY-MM-DD HH:mm:ss'),
         summaryHtml,
-        pluResPath: `${process.cwd()}/plugins/group-manager/resources/`
+        pluResPath: `${process.cwd()}/plugins/group-insight/resources/`
       }
 
-      const img = await puppeteer.screenshot('group-manager-summary', {
-        tplFile: `${process.cwd()}/plugins/group-manager/resources/summary/index.html`,
+      const img = await puppeteer.screenshot('group-insight-summary', {
+        tplFile: `${process.cwd()}/plugins/group-insight/resources/summary/index.html`,
         ...templateData
       })
 
