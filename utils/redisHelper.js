@@ -65,7 +65,7 @@ export default class RedisHelper {
         try {
           messages.push(JSON.parse(msg))
         } catch (err) {
-          logger.error(`[群聊管理] 解析消息失败: ${err}`)
+          logger.error(`[群聊助手] 解析消息失败: ${err}`)
         }
       }
     }
@@ -94,7 +94,7 @@ export default class RedisHelper {
         records.push(atData)
         await redis.set(key, JSON.stringify(records), { EX: expireSeconds })
       } catch (err) {
-        logger.error(`[群聊管理] 保存艾特记录失败: ${err}`)
+        logger.error(`[群聊助手] 保存艾特记录失败: ${err}`)
       }
     } else {
       // 新建数据
@@ -117,7 +117,7 @@ export default class RedisHelper {
     try {
       return JSON.parse(data)
     } catch (err) {
-      logger.error(`[群聊管理] 获取艾特记录失败: ${err}`)
+      logger.error(`[群聊助手] 获取艾特记录失败: ${err}`)
       return null
     }
   }
@@ -164,5 +164,142 @@ export default class RedisHelper {
     }
 
     return total
+  }
+
+  /**
+   * 获取总结键名
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期 (YYYY-MM-DD)
+   */
+  getSummaryKey(groupId, date = null) {
+    const dateStr = date || moment().format('YYYY-MM-DD')
+    return `${this.keyPrefix}:summary:${groupId}:${dateStr}`
+  }
+
+  /**
+   * 保存每日总结
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期 (YYYY-MM-DD)
+   * @param {object} summaryData - 总结数据
+   * @param {number} retentionDays - 保留天数 (0 = 永久)
+   */
+  async saveDailySummary(groupId, date, summaryData, retentionDays = 0) {
+    const key = this.getSummaryKey(groupId, date)
+
+    // 添加保存时间戳
+    summaryData.savedAt = Date.now()
+
+    // 保存为 Hash 结构
+    const fields = {
+      content: summaryData.content || '',
+      messageCount: summaryData.messageCount || 0,
+      lastUpdateHour: summaryData.lastUpdateHour || 0,
+      lastUpdateTime: summaryData.lastUpdateTime || Date.now(),
+      provider: summaryData.provider || '',
+      model: summaryData.model || '',
+      savedAt: summaryData.savedAt
+    }
+
+    // 批量设置字段
+    for (const [field, value] of Object.entries(fields)) {
+      await redis.hSet(key, field, String(value))
+    }
+
+    // 设置过期时间（如果不是永久保存）
+    if (retentionDays > 0) {
+      const expireSeconds = retentionDays * 24 * 60 * 60
+      await redis.expire(key, expireSeconds)
+    }
+
+    logger.debug(`[群聊助手] 保存总结成功: ${key}`)
+  }
+
+  /**
+   * 获取指定日期的总结
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期 (YYYY-MM-DD)
+   */
+  async getDailySummary(groupId, date = null) {
+    const key = this.getSummaryKey(groupId, date)
+
+    try {
+      const exists = await redis.exists(key)
+      if (!exists) {
+        logger.debug(`[群聊助手] 总结不存在: ${key}`)
+        return null
+      }
+
+      const data = await redis.hGetAll(key)
+
+      if (!data || Object.keys(data).length === 0) {
+        logger.debug(`[群聊助手] 总结数据为空: ${key}`)
+        return null
+      }
+
+      // 转换数字类型
+      return {
+        content: data.content || '',
+        messageCount: parseInt(data.messageCount) || 0,
+        lastUpdateHour: parseInt(data.lastUpdateHour) || 0,
+        lastUpdateTime: parseInt(data.lastUpdateTime) || 0,
+        provider: data.provider || '',
+        model: data.model || '',
+        savedAt: parseInt(data.savedAt) || 0,
+        date: date || moment().format('YYYY-MM-DD')
+      }
+    } catch (err) {
+      logger.error(`[群聊助手] 获取总结失败: ${err}`)
+      return null
+    }
+  }
+
+  /**
+   * 获取最新的总结（如果今天没有，返回最近一次的）
+   * @param {string} groupId - 群号
+   * @param {number} searchDays - 最多向前搜索的天数
+   */
+  async getLatestSummary(groupId, searchDays = 7) {
+    for (let i = 0; i < searchDays; i++) {
+      const date = moment().subtract(i, 'days').format('YYYY-MM-DD')
+      const summary = await this.getDailySummary(groupId, date)
+
+      if (summary) {
+        logger.debug(`[群聊助手] 找到最新总结: ${date}`)
+        return summary
+      }
+    }
+
+    logger.debug(`[群聊助手] 未找到最近${searchDays}天的总结`)
+    return null
+  }
+
+  /**
+   * 获取多天的总结
+   * @param {string} groupId - 群号
+   * @param {number} days - 天数
+   */
+  async getSummaries(groupId, days = 3) {
+    const summaries = []
+
+    for (let i = 0; i < days; i++) {
+      const date = moment().subtract(i, 'days').format('YYYY-MM-DD')
+      const summary = await this.getDailySummary(groupId, date)
+
+      if (summary) {
+        summaries.push(summary)
+      }
+    }
+
+    return summaries
+  }
+
+  /**
+   * 删除总结
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期 (YYYY-MM-DD)
+   */
+  async deleteSummary(groupId, date = null) {
+    const key = this.getSummaryKey(groupId, date)
+    return await redis.del(key)
   }
 }

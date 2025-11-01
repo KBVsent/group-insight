@@ -38,7 +38,7 @@ export default class WordCloudGenerator {
 
     try {
       // 处理消息并生成词频统计
-      logger.info(`[群聊管理] 开始生成词云，消息数: ${messages.length}`)
+      logger.info(`[群聊助手] 开始生成词云，消息数: ${messages.length}`)
 
       const wordCount = await this.textProcessor.processMessages(messages, {
         minLength,
@@ -47,11 +47,11 @@ export default class WordCloudGenerator {
       })
 
       if (wordCount.length === 0) {
-        logger.warn('[群聊管理] 没有足够的词汇生成词云')
+        logger.warn('[群聊助手] 没有足够的词汇生成词云')
         return null
       }
 
-      logger.info(`[群聊管理] 统计到 ${wordCount.length} 个词汇`)
+      logger.info(`[群聊助手] 统计到 ${wordCount.length} 个词汇`)
 
       // 准备词云数据（wordcloud2.js 格式：[词, 权重]）
       const wordList = wordCount.map(item => [item.word, item.count])
@@ -76,10 +76,10 @@ export default class WordCloudGenerator {
         ...templateData
       })
 
-      logger.info('[群聊管理] 词云生成成功')
+      logger.info('[群聊助手] 词云生成成功')
       return img
     } catch (err) {
-      logger.error(`[群聊管理] 词云生成失败: ${err}`)
+      logger.error(`[群聊助手] 词云生成失败: ${err}`)
       logger.error(err.stack)
       return null
     }

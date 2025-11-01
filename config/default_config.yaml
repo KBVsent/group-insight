@@ -27,6 +27,9 @@ groupManager:
     # 最大 Token 数
     maxTokens: 2000
 
+    # 每次总结最多处理的消息数量
+    maxMessages: 500
+
   # 词云配置
   wordCloud:
     # 最多显示词数
@@ -58,3 +61,23 @@ groupManager:
 
     # 最大消息长度（超过将被截断）
     maxMessageLength: 500
+
+  # 定时总结配置
+  schedule:
+    # 是否启用定时总结
+    enabled: false
+
+    # Cron 表达式（默认每小时整点）
+    cron: '0 * * * *'
+
+    # 白名单群列表（仅这些群会启用定时总结，为空则不启用）
+    # 示例: ['123456789', '987654321']
+    whitelist: []
+
+  # 总结功能配置
+  summary:
+    # 是否将上次总结作为上下文输入给 AI
+    includeContext: true
+
+    # 总结保留天数（0 = 永久保存）
+    retentionDays: 0

@@ -19,7 +19,14 @@ export default class MessageCollector {
     this.collectImages = msgConfig.collectImages !== undefined ? msgConfig.collectImages : false
     this.collectFaces = msgConfig.collectFaces !== undefined ? msgConfig.collectFaces : false
 
-    logger.info(`[群聊管理] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}`)
+    // 定时总结白名单配置
+    this.scheduleConfig = config.schedule || {}
+    this.whitelist = this.scheduleConfig.whitelist || []
+
+    logger.info(`[群聊助手] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}`)
+    if (this.whitelist.length > 0) {
+      logger.info(`[群聊助手] 定时总结白名单: ${this.whitelist.length} 个群`)
+    }
   }
 
   /**
@@ -30,11 +37,11 @@ export default class MessageCollector {
       try {
         await this.handleMessage(e)
       } catch (err) {
-        logger.error(`[群聊管理] 消息收集失败: ${err}`)
+        logger.error(`[群聊助手] 消息收集失败: ${err}`)
       }
     })
 
-    logger.info('[群聊管理] 消息收集器已启动')
+    logger.info('[群聊助手] 消息收集器已启动')
   }
 
   /**
@@ -77,7 +84,7 @@ export default class MessageCollector {
         const imgUrl = msg.url || msg.file
         if (imgUrl) {
           images.push(imgUrl)
-          logger.debug(`[群聊管理] 收集图片: ${imgUrl}`)
+          logger.debug(`[群聊助手] 收集图片: ${imgUrl}`)
         }
       } else if (msg.type === 'face' && this.collectFaces) {
         faces.push(msg.id)
@@ -151,7 +158,7 @@ export default class MessageCollector {
         const reply = (await e.group.getChatHistory(e.source.seq, 1)).pop()
         replyMessageId = reply ? reply.message_id : ''
       } catch (err) {
-        logger.debug(`[群聊管理] 获取回复消息失败: ${err}`)
+        logger.debug(`[群聊助手] 获取回复消息失败: ${err}`)
       }
     }
 
@@ -167,7 +174,7 @@ export default class MessageCollector {
         messageId: replyMessageId
       }
 
-      logger.debug(`[群聊管理] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${message.faces.length}`)
+      logger.debug(`[群聊助手] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${message.faces.length}`)
       await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
     }
   }
@@ -204,5 +211,26 @@ export default class MessageCollector {
    */
   async clearAllAtRecords() {
     return await this.redisHelper.clearAllAtRecords()
+  }
+
+  /**
+   * 检查群是否在定时总结白名单中
+   * @param {string} groupId - 群号
+   */
+  isGroupInWhitelist(groupId) {
+    // 白名单为空则不启用定时总结
+    if (this.whitelist.length === 0) {
+      return false
+    }
+
+    // 检查群是否在白名单中
+    return this.whitelist.includes(String(groupId))
+  }
+
+  /**
+   * 获取所有白名单群列表
+   */
+  getWhitelistGroups() {
+    return this.whitelist.map(id => String(id))
   }
 }

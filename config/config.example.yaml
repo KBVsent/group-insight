@@ -1,15 +1,51 @@
 # 用户配置文件
-# 复制此文件为 config/config.yaml 并填入你的配置
+# 复制此文件为 config.yaml 并填入你的配置
 
 groupManager:
+  # AI 配置
   ai:
-    # 在此填入你的 AI API Key
+    # 在此填入你的 AI API Key（必填）
     apiKey: 'your-api-key-here'
+
+    # AI 提供商：claude / openai
+    # provider: 'claude'
+
+    # AI 模型
+    # model: 'claude-haiku-4-5'
 
     # 如果使用国内镜像或自定义端点，可以配置 baseURL
     # baseURL: 'https://your-api-endpoint.com'
 
-  # 可以覆盖默认配置
-  # retentionDays: 14
-  # wordCloud:
-  #   maxWords: 150
+    # 每次总结最多处理的消息数量
+    # maxMessages: 500
+
+  # 定时总结配置
+  schedule:
+    # 是否启用定时总结（默认：false）
+    enabled: false
+
+    # 白名单群列表（必填，只有这些群会启用定时总结）
+    # 请填入群号，例如：['123456789', '987654321']
+    whitelist: []
+
+    # 注意：
+    # 1. 定时总结每小时整点自动执行
+    # 2. 采用增量更新模式，每次总结当天从 0:00 到当前时间的所有消息
+    # 3. 上次的总结会作为上下文输入给 AI，确保连贯性
+
+  # 总结功能配置
+  # summary:
+  #   # 是否将上次总结作为上下文（默认：true）
+  #   includeContext: true
+  #
+  #   # 总结保留天数（0 = 永久保存，默认：0）
+  #   retentionDays: 0
+
+  # 其他可覆盖的默认配置
+  # retentionDays: 14            # 消息保留天数
+  # atRetentionHours: 48         # 艾特记录保留小时数
+
+  # wordCloud:                   # 词云配置
+  #   maxWords: 150              # 最多显示词数
+  #   width: 1600                # 画布宽度
+  #   height: 1000               # 画布高度

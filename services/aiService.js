@@ -15,6 +15,7 @@ export default class AIService {
     this.baseURL = config.baseURL
     this.timeout = config.timeout || 60000
     this.maxTokens = config.maxTokens || 2000
+    this.maxMessages = config.maxMessages || 500
     this.textProcessor = new TextProcessor()
     this.client = null
   }
@@ -24,7 +25,7 @@ export default class AIService {
    */
   async init() {
     if (!this.apiKey) {
-      logger.warn('[群聊管理] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
+      logger.warn('[群聊助手] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
       return false
     }
 
@@ -37,14 +38,14 @@ export default class AIService {
           await this.initOpenAI()
           break
         default:
-          logger.error(`[群聊管理] 不支持的 AI 提供商: ${this.provider}`)
+          logger.error(`[群聊助手] 不支持的 AI 提供商: ${this.provider}`)
           return false
       }
 
-      logger.info(`[群聊管理] AI 服务初始化成功，提供商: ${this.provider}`)
+      logger.info(`[群聊助手] AI 服务初始化成功，提供商: ${this.provider}`)
       return true
     } catch (err) {
-      logger.error(`[群聊管理] AI 服务初始化失败: ${err}`)
+      logger.error(`[群聊助手] AI 服务初始化失败: ${err}`)
       return false
     }
   }
@@ -65,8 +66,8 @@ export default class AIService {
 
       this.model = this.model || 'claude-3-5-sonnet-20241022'
     } catch (err) {
-      logger.error('[群聊管理] @anthropic-ai/sdk 未安装')
-      logger.warn('[群聊管理] 请运行: cd plugins/group-insight && pnpm install')
+      logger.error('[群聊助手] @anthropic-ai/sdk 未安装')
+      logger.warn('[群聊助手] 请运行: cd plugins/group-insight && pnpm install')
       throw err
     }
   }
@@ -87,8 +88,8 @@ export default class AIService {
 
       this.model = this.model || 'gpt-4o'
     } catch (err) {
-      logger.error('[群聊管理] openai 未安装')
-      logger.warn('[群聊管理] 请运行: cd plugins/group-insight && pnpm add openai')
+      logger.error('[群聊助手] openai 未安装')
+      logger.warn('[群聊助手] 请运行: cd plugins/group-insight && pnpm add openai')
       throw err
     }
   }
@@ -97,6 +98,9 @@ export default class AIService {
    * 总结群聊消息
    * @param {array} messages - 消息列表
    * @param {object} options - 选项
+   * @param {string} options.groupName - 群名
+   * @param {number} options.days - 天数
+   * @param {string} options.previousSummary - 上次总结内容（用作上下文）
    */
   async summarize(messages, options = {}) {
     if (!this.client) {
@@ -108,21 +112,22 @@ export default class AIService {
 
     const {
       groupName = '未知群聊',
-      days = 1
+      days = 1,
+      previousSummary = null
     } = options
 
     try {
-      // 格式化消息
-      const formattedMessages = this.textProcessor.formatForAI(messages, 500)
+      // 格式化消息（使用可配置的消息数量限制）
+      const formattedMessages = this.textProcessor.formatForAI(messages, this.maxMessages)
 
       if (formattedMessages.length === 0) {
         return { success: false, error: '没有可总结的消息' }
       }
 
-      // 构建 Prompt
-      const prompt = this.buildPrompt(formattedMessages, groupName, days)
+      // 构建 Prompt（包含历史总结上下文）
+      const prompt = this.buildPrompt(formattedMessages, groupName, days, previousSummary)
 
-      logger.info(`[群聊管理] 开始调用 AI 总结，消息数: ${formattedMessages.length}`)
+      logger.info(`[群聊助手] 开始调用 AI 总结，消息数: ${formattedMessages.length}${previousSummary ? '（包含历史总结上下文）' : ''}`)
 
       // 调用 AI
       let summary
@@ -137,7 +142,7 @@ export default class AIService {
           return { success: false, error: '不支持的 AI 提供商' }
       }
 
-      logger.info('[群聊管理] AI 总结完成')
+      logger.info('[群聊助手] AI 总结完成')
 
       return {
         success: true,
@@ -147,15 +152,19 @@ export default class AIService {
         model: this.model
       }
     } catch (err) {
-      logger.error(`[群聊管理] AI 总结失败: ${err}`)
+      logger.error(`[群聊助手] AI 总结失败: ${err}`)
       return { success: false, error: err.message }
     }
   }
 
   /**
    * 构建 Prompt
+   * @param {array} messages - 格式化后的消息
+   * @param {string} groupName - 群名
+   * @param {number} days - 天数
+   * @param {string} previousSummary - 上次总结内容（可选）
    */
-  buildPrompt(messages, groupName, days) {
+  buildPrompt(messages, groupName, days, previousSummary = null) {
     const timeRange = days === 1 ? '今天' : days === 3 ? '最近三天' : '最近七天'
 
     // 将消息格式化为文本
@@ -166,7 +175,20 @@ export default class AIService {
       })
       .join('\n')
 
-    return `你是一个群聊分析助手。请分析以下群聊消息，并生成一份简洁的总结报告。
+    // 构建历史总结上下文部分
+    let contextSection = ''
+    if (previousSummary) {
+      contextSection = `
+
+之前的总结内容（作为上下文参考）：
+${previousSummary}
+
+---
+
+请基于以上历史总结，结合下面的新消息，生成更新后的总结。注意整合新旧信息，保持连贯性。`
+    }
+
+    return `你是一个群聊分析助手。请分析以下群聊消息，并生成一份简洁的总结报告。${contextSection}
 
 群聊信息：
 - 群名：${groupName}
@@ -196,7 +218,7 @@ ${messagesText}
 1. 总结要简洁明了，避免冗长
 2. 忽略无意义的闲聊和灌水内容
 3. 关注有价值的讨论和信息
-4. 保持客观中立的语气`
+4. 保持客观中立的语气${previousSummary ? '\n5. 如果之前总结中的话题在新消息中有延续，请更新相关内容' : ''}`
   }
 
   /**
