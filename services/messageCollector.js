@@ -10,13 +10,16 @@ import RedisHelper from '../utils/redisHelper.js'
 export default class MessageCollector {
   constructor(config) {
     this.config = config || {}
+    const msgConfig = config.messageCollection || {}
     this.redisHelper = new RedisHelper(
       config.retentionDays || 7,
       config.atRetentionHours || 24
     )
-    this.maxMessageLength = config.maxMessageLength || 500
-    this.collectImages = config.collectImages !== undefined ? config.collectImages : false
-    this.collectFaces = config.collectFaces !== undefined ? config.collectFaces : false
+    this.maxMessageLength = msgConfig.maxMessageLength || 500
+    this.collectImages = msgConfig.collectImages !== undefined ? msgConfig.collectImages : false
+    this.collectFaces = msgConfig.collectFaces !== undefined ? msgConfig.collectFaces : false
+
+    logger.info(`[群聊管理] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}`)
   }
 
   /**
