@@ -24,7 +24,7 @@ const __dirname = dirname(__filename)
 // 加载配置
 async function loadConfig() {
   const defaultConfigPath = join(__dirname, 'config/default_config.yaml')
-  const userConfigPath = join(process.cwd(), 'config/config/group-insight.yaml')
+  const userConfigPath = join(__dirname, 'config/config.yaml')
 
   let config = {}
 
@@ -33,6 +33,9 @@ async function loadConfig() {
     const yaml = await import('yaml')
     const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
     config = yaml.parse(defaultConfig).groupManager || {}
+  } else {
+    logger.warn('[群聊管理] 默认配置文件不存在')
+    return config
   }
 
   // 合并用户配置
@@ -41,6 +44,9 @@ async function loadConfig() {
     const userConfig = fs.readFileSync(userConfigPath, 'utf8')
     const userSettings = yaml.parse(userConfig).groupManager || {}
     config = { ...config, ...userSettings }
+    logger.info('[群聊管理] 已加载用户配置')
+  } else {
+    logger.info('[群聊管理] 未找到用户配置，使用默认配置（可复制 config/config.example.yaml 为 config/config.yaml 进行自定义配置）')
   }
 
   return config
@@ -184,15 +190,17 @@ export class GroupManager extends plugin {
 
     // 处理合并转发的标题
     if (typeof forwardMsg.data === 'object') {
+      // 对象格式：直接修改属性（推荐方式）
       const detail = forwardMsg.data?.meta?.detail
       if (detail) {
         detail.news = [{ text: '点击查看谁艾特了你' }]
       }
-    } else {
-      forwardMsg.data = forwardMsg.data
-        .replace(/\n/g, '')
-        .replace(/<title color="#777777" size="26">(.+?)<\/title>/g, '___')
-        .replace(/___+/, '<title color="#777777" size="26">点击查看谁艾特了你</title>')
+    } else if (typeof forwardMsg.data === 'string') {
+      // 字符串格式（XML）：一次性替换标题
+      forwardMsg.data = forwardMsg.data.replace(
+        /<title color="#777777" size="26">.*?<\/title>/,
+        '<title color="#777777" size="26">点击查看谁艾特了你</title>'
+      )
     }
 
     await e.reply(forwardMsg)
@@ -340,11 +348,11 @@ export class GroupManager extends plugin {
         messageCount: options.messageCount,
         createTime: moment().format('YYYY-MM-DD HH:mm:ss'),
         summaryHtml,
-        pluResPath: `${process.cwd()}/plugins/group-insight/resources/`
+        pluResPath: join(__dirname, 'resources') + '/'
       }
 
       const img = await puppeteer.screenshot('group-insight-summary', {
-        tplFile: `${process.cwd()}/plugins/group-insight/resources/summary/index.html`,
+        tplFile: join(__dirname, 'resources/summary/index.html'),
         ...templateData
       })
 

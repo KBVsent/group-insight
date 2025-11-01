@@ -1,5 +1,5 @@
 # 用户配置文件
-# 复制此文件为 config/config/group-insight.yaml 并填入你的配置
+# 复制此文件为 config/config.yaml 并填入你的配置
 
 groupManager:
   ai:
