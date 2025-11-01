@@ -244,7 +244,14 @@ export class GroupManager extends plugin {
       }
 
       // 获取群名
-      const groupName = e.group.name || '未知群聊'
+      let groupName = '未知群聊'
+      try {
+        const groupInfo = await e.group.getInfo?.()
+        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+      } catch (err) {
+        logger.debug(`[群聊管理] 获取群名失败: ${err}，使用群号作为群名`)
+        groupName = `群${e.group_id}`
+      }
 
       // 生成词云
       const img = await wordCloudGenerator.generate(messages, {
@@ -301,7 +308,14 @@ export class GroupManager extends plugin {
       }
 
       // 获取群名
-      const groupName = e.group.name || '未知群聊'
+      let groupName = '未知群聊'
+      try {
+        const groupInfo = await e.group.getInfo?.()
+        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+      } catch (err) {
+        logger.debug(`[群聊管理] 获取群名失败: ${err}，使用群号作为群名`)
+        groupName = `群${e.group_id}`
+      }
 
       // 调用 AI 总结
       const result = await aiService.summarize(messages, {
