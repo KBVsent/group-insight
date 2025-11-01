@@ -35,16 +35,25 @@
     const canvas = document.getElementById('wordcloud');
     const container = document.querySelector('.wordcloud-container');
 
-    // 设置 canvas 尺寸
-    canvas.width = {{width}};
-    canvas.height = {{height}};
+    // 高 DPI 渲染：使用 3 倍分辨率
+    const dpiScale = 3;
+    const baseWidth = {{width}};
+    const baseHeight = {{height}};
 
-    // 配置词云
+    // 设置 canvas 物理尺寸（高分辨率用于清晰渲染）
+    canvas.width = baseWidth * dpiScale;
+    canvas.height = baseHeight * dpiScale;
+
+    // 设置 canvas 显示尺寸（通过 CSS，保持原始大小）
+    canvas.style.width = baseWidth + 'px';
+    canvas.style.height = baseHeight + 'px';
+
+    // 配置词云（使用高分辨率尺寸）
     WordCloud(canvas, {
       list: wordList,
-      gridSize: Math.round(16 * canvas.width / 1024),
+      gridSize: Math.round(16 * dpiScale * baseWidth / 1024),
       weightFactor: function (size) {
-        return Math.pow(size, 1.2) * canvas.width / 1024;
+        return Math.pow(size, 1.3) * dpiScale * baseWidth / 800;
       },
       fontFamily: 'Microsoft YaHei, SimHei, sans-serif',
       color: function () {
@@ -58,7 +67,7 @@
       rotateRatio: 0.3,
       rotationSteps: 2,
       backgroundColor: '{{backgroundColor}}',
-      minSize: 12,
+      minSize: 36,
       drawOutOfBound: false,
       shrinkToFit: true
     });
