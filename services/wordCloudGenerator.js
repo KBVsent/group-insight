@@ -36,6 +36,11 @@ export default class WordCloudGenerator {
       backgroundColor = this.config.backgroundColor || '#ffffff'
     } = options
 
+    // 获取渲染质量配置
+    const renderConfig = this.config.render || {}
+    const imgType = renderConfig.imgType || 'png'
+    const quality = renderConfig.quality || 100
+
     try {
       // 处理消息并生成词频统计
       logger.info(`[群聊助手] 开始生成词云，消息数: ${messages.length}`)
@@ -70,9 +75,11 @@ export default class WordCloudGenerator {
         pluResPath: join(pluginPath, 'resources') + '/'
       }
 
-      // 渲染模板
+      // 渲染模板（使用高质量参数）
       const img = await puppeteer.screenshot('group-insight-wordcloud', {
         tplFile: join(pluginPath, 'resources/wordcloud/index.html'),
+        imgType,
+        quality,
         ...templateData
       })
 

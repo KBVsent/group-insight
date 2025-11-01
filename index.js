@@ -576,6 +576,11 @@ export class GroupManager extends plugin {
       const hour = options.hour !== undefined ? options.hour : moment().hour()
       const timeLabel = `${date} ${hour}:00`
 
+      // 获取渲染质量配置
+      const renderConfig = globalConfig.summary?.render || {}
+      const imgType = renderConfig.imgType || 'png'
+      const quality = renderConfig.quality || 100
+
       const templateData = {
         provider: result.provider === 'claude' ? 'Claude' : result.provider === 'openai' ? 'OpenAI' : result.provider,
         groupName: options.groupName,
@@ -586,8 +591,11 @@ export class GroupManager extends plugin {
         pluResPath: join(__dirname, 'resources') + '/'
       }
 
+      // 使用高质量渲染参数
       const img = await puppeteer.screenshot('group-insight-summary', {
         tplFile: join(__dirname, 'resources/summary/index.html'),
+        imgType,
+        quality,
         ...templateData
       })
 

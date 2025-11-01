@@ -41,12 +41,19 @@ groupManager:
     # 最小词频
     minFrequency: 2
 
-    # 画布尺寸
-    width: 1200
-    height: 800
+    # 画布尺寸（提高分辨率以获得更清晰的图片）
+    width: 2400
+    height: 1600
 
     # 背景颜色
     backgroundColor: '#ffffff'
+
+    # 渲染质量配置
+    render:
+      # 图片格式：jpeg 或 png（png 无损但文件更大）
+      imgType: 'png'
+      # JPEG 质量（1-100，仅 jpeg 格式有效）
+      quality: 100
 
   # 消息收集配置
   messageCollection:
@@ -81,3 +88,10 @@ groupManager:
 
     # 总结保留天数（0 = 永久保存）
     retentionDays: 0
+
+    # 渲染质量配置
+    render:
+      # 图片格式：jpeg 或 png（png 无损但文件更大）
+      imgType: 'png'
+      # JPEG 质量（1-100，仅 jpeg 格式有效）
+      quality: 100
