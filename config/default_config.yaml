@@ -30,6 +30,58 @@ groupManager:
     # 每次总结最多处理的消息数量
     maxMessages: 500
 
+    # LLM 请求超时（秒）
+    llm_timeout: 100
+
+    # LLM 重试次数
+    llm_retries: 2
+
+    # 重试退避时间（秒）
+    llm_backoff: 2
+
+  # 高级 AI 分析配置
+  analysis:
+    # 话题分析
+    topic:
+      # 是否启用话题分析
+      enabled: true
+      # 最多提取话题数
+      max_topics: 5
+
+    # 金句提取
+    goldenQuote:
+      # 是否启用金句提取
+      enabled: true
+      # 最多提取金句数
+      max_golden_quotes: 5
+      # 金句最短长度
+      min_quote_length: 5
+      # 金句最长长度
+      max_quote_length: 100
+
+    # 用户称号
+    userTitle:
+      # 是否启用用户称号
+      enabled: true
+      # 最多分配称号数
+      max_user_titles: 8
+      # 获得称号的最少消息数
+      min_messages_for_title: 5
+
+    # 活跃度可视化
+    activity:
+      # 是否启用活跃度图表
+      enabled: true
+
+    # 最少消息数阈值（少于此数不执行 AI 分析）
+    min_messages_threshold: 20
+
+  # 统计配置
+  statistics:
+    # 夜间时段定义
+    night_start_hour: 0
+    night_end_hour: 6
+
   # 词云配置
   wordCloud:
     # 最多显示词数

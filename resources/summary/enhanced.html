@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>群聊分析报告</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .title {
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    /* 基础统计卡片 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    /* 活跃度图表样式 (由 ActivityVisualizer 提供) */
+    {{@activityStyles}}
+
+    /* 章节 */
+    .section {
+      margin-bottom: 30px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 2px;
+    }
+
+    /* 话题卡片 */
+    .topic-card {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+    }
+
+    .topic-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+
+    .topic-contributors {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 10px;
+    }
+
+    .topic-detail {
+      font-size: 14px;
+      color: #374151;
+      line-height: 1.8;
+    }
+
+    /* 用户称号卡片 */
+    .titles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 15px;
+    }
+
+    .title-card {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .title-card:nth-child(even) {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    .title-card:nth-child(3n) {
+      background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+
+    .title-user {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .title-badge {
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+
+    .title-mbti {
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.3);
+      padding: 3px 8px;
+      border-radius: 12px;
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+
+    .title-reason {
+      font-size: 11px;
+      opacity: 0.9;
+      line-height: 1.4;
+    }
+
+    /* 金句卡片 */
+    .quote-card {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      position: relative;
+    }
+
+    .quote-card::before {
+      content: '"';
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 40px;
+      color: #fbbf24;
+      opacity: 0.3;
+      font-family: Georgia, serif;
+    }
+
+    .quote-text {
+      font-size: 16px;
+      color: #374151;
+      line-height: 1.8;
+      margin-bottom: 10px;
+      padding-left: 30px;
+      font-style: italic;
+    }
+
+    .quote-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #6b7280;
+      padding-left: 30px;
+    }
+
+    .quote-sender {
+      font-weight: bold;
+      color: #f59e0b;
+    }
+
+    .quote-reason {
+      text-align: right;
+      flex: 1;
+      margin-left: 10px;
+    }
+
+    /* 空状态 */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+
+    /* 页脚 */
+    .footer {
+      background: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .footer p {
+      margin: 5px 0;
+    }
+
+    /* 移动端适配 */
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+
+      .container {
+        border-radius: 12px;
+      }
+
+      .header {
+        padding: 20px;
+      }
+
+      .title {
+        font-size: 22px;
+      }
+
+      .content {
+        padding: 15px;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .stat-value {
+        font-size: 20px;
+      }
+
+      .section-title {
+        font-size: 18px;
+      }
+
+      .titles-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 头部 -->
+    <div class="header">
+      <h1 class="title">🎯 群聊分析报告</h1>
+      <div class="subtitle">由 {{provider}} {{model}} 生成</div>
+    </div>
+
+    <div class="content">
+      <!-- 基础统计 -->
+      <div class="section">
+        <div class="section-title">📊 基础统计</div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">消息总数</div>
+            <div class="stat-value">{{totalMessages}}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">参与人数</div>
+            <div class="stat-value">{{totalUsers}}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">总字符数</div>
+            <div class="stat-value">{{totalChars}}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">表情数量</div>
+            <div class="stat-value">{{totalEmojis}}</div>
+          </div>
+        </div>
+        <div class="topic-card" style="background: #f0f9ff; border-left-color: #3b82f6;">
+          <div class="topic-detail">
+            📅 分析时段: {{dateRange}}<br>
+            📈 最活跃时段: {{peakPeriod}}<br>
+            💬 平均消息长度: {{avgLength}} 字
+          </div>
+        </div>
+      </div>
+
+      <!-- 活跃度图表 -->
+      {{if enableActivityChart}}
+      <div class="section">
+        {{@activityChart}}
+      </div>
+      {{/if}}
+
+      <!-- 热门话题 -->
+      {{if topics && topics.length > 0}}
+      <div class="section">
+        <div class="section-title">💬 热门话题</div>
+        {{each topics topic index}}
+        <div class="topic-card">
+          <div class="topic-title">{{index + 1}}. {{topic.topic}}</div>
+          {{if topic.contributors && topic.contributors.length > 0}}
+          <div class="topic-contributors">
+            👥 主要参与者: {{topic.contributors.join('、')}}
+          </div>
+          {{/if}}
+          <div class="topic-detail">{{topic.detail}}</div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- 群友称号 -->
+      {{if userTitles && userTitles.length > 0}}
+      <div class="section">
+        <div class="section-title">🏆 群友称号</div>
+        <div class="titles-grid">
+          {{each userTitles item}}
+          <div class="title-card">
+            <div class="title-user">{{item.user}}</div>
+            <div class="title-badge">「{{item.title}}」</div>
+            <div class="title-mbti">{{item.mbti}}</div>
+            <div class="title-reason">{{item.reason}}</div>
+          </div>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
+
+      <!-- 群圣经 (金句) -->
+      {{if goldenQuotes && goldenQuotes.length > 0}}
+      <div class="section">
+        <div class="section-title">💎 群圣经</div>
+        {{each goldenQuotes quote index}}
+        <div class="quote-card">
+          <div class="quote-text">{{quote.quote}}</div>
+          <div class="quote-footer">
+            <div class="quote-sender">—— {{quote.sender}}</div>
+            <div class="quote-reason">{{quote.reason}}</div>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      <!-- 传统总结 (如果有) -->
+      {{if summaryHtml}}
+      <div class="section">
+        <div class="section-title">📝 AI 总结</div>
+        <div class="topic-card" style="background: #f0fdf4; border-left-color: #10b981;">
+          <div class="topic-detail">
+            {{@summaryHtml}}
+          </div>
+        </div>
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- 页脚 -->
+    <div class="footer">
+      <p>📅 报告生成时间: {{createTime}}</p>
+      {{if tokenUsage}}
+      <p>🤖 Token 使用: Prompt {{tokenUsage.prompt}} + Completion {{tokenUsage.completion}} = Total {{tokenUsage.total}}</p>
+      {{/if}}
+      <p>⚠️ 本报告由 AI 生成,仅供参考</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -71,7 +71,14 @@ export default class MessageCollector {
     let text = ''
     const atUsers = []
     const images = []
-    const faces = []
+    const faces = {
+      face: [],      // 普通表情
+      mface: [],     // 动画表情
+      bface: [],     // 超级表情
+      sface: [],     // 小表情
+      animated: 0    // 动图数量 (通过 summary 字段检测)
+    }
+    let hasReply = false
 
     // 遍历消息段
     for (const msg of e.message) {
@@ -86,8 +93,23 @@ export default class MessageCollector {
           images.push(imgUrl)
           logger.debug(`[群聊助手] 收集图片: ${imgUrl}`)
         }
-      } else if (msg.type === 'face' && this.collectFaces) {
-        faces.push(msg.id)
+      } else if (this.collectFaces) {
+        // 收集各种类型的表情
+        if (msg.type === 'face') {
+          faces.face.push(msg.id)
+        } else if (msg.type === 'mface') {
+          faces.mface.push(msg.id)
+          // 检测是否是动画表情
+          if (msg.summary && msg.summary.includes('动画')) {
+            faces.animated++
+          }
+        } else if (msg.type === 'bface') {
+          faces.bface.push(msg.id)
+        } else if (msg.type === 'sface') {
+          faces.sface.push(msg.id)
+        }
+      } else if (msg.type === 'reply') {
+        hasReply = true
       }
     }
 
@@ -104,6 +126,7 @@ export default class MessageCollector {
       atUsers,
       images,
       faces,
+      hasReply,
       atAll: e.atall || false
     }
   }
@@ -114,20 +137,40 @@ export default class MessageCollector {
    * @param {object} message - 消息数据
    */
   async saveMessage(e, message) {
+    // 获取消息时间的小时数
+    const msgDate = new Date(e.time * 1000)
+    const hour = msgDate.getHours()
+
     const messageData = {
       user_id: e.user_id,
       nickname: e.sender.nickname || e.nickname,
       message: message.text,
       time: e.time,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      hour,  // 消息小时 (0-23)
+      length: message.text.length,  // 消息长度
+      hasReply: message.hasReply  // 是否是回复消息
     }
 
     if (message.images.length > 0) {
       messageData.images = message.images
     }
 
-    if (message.faces.length > 0) {
-      messageData.faces = message.faces
+    // 计算总表情数
+    const totalFaces = message.faces.face.length +
+                       message.faces.mface.length +
+                       message.faces.bface.length +
+                       message.faces.sface.length
+
+    if (totalFaces > 0 || message.faces.animated > 0) {
+      messageData.faces = {
+        face: message.faces.face,
+        mface: message.faces.mface,
+        bface: message.faces.bface,
+        sface: message.faces.sface,
+        animated: message.faces.animated,
+        total: totalFaces + message.faces.animated
+      }
     }
 
     await this.redisHelper.saveMessage(e.group_id, messageData)
@@ -174,7 +217,12 @@ export default class MessageCollector {
         messageId: replyMessageId
       }
 
-      logger.debug(`[群聊助手] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${message.faces.length}`)
+      const facesCount = message.faces.face.length +
+                        message.faces.mface.length +
+                        message.faces.bface.length +
+                        message.faces.sface.length +
+                        message.faces.animated
+      logger.debug(`[群聊助手] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${facesCount}`)
       await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
     }
   }

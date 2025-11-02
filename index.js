@@ -19,6 +19,13 @@ import MessageCollector from './services/messageCollector.js'
 import WordCloudGenerator from './services/wordCloudGenerator.js'
 import AIService from './services/aiService.js'
 import SummaryService from './services/summaryService.js'
+import StatisticsService from './services/StatisticsService.js'
+import ActivityVisualizer from './services/ActivityVisualizer.js'
+
+// 分析器
+import TopicAnalyzer from './services/analyzers/TopicAnalyzer.js'
+import GoldenQuoteAnalyzer from './services/analyzers/GoldenQuoteAnalyzer.js'
+import UserTitleAnalyzer from './services/analyzers/UserTitleAnalyzer.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -60,6 +67,11 @@ let messageCollector = null
 let wordCloudGenerator = null
 let aiService = null
 let summaryService = null
+let statisticsService = null
+let activityVisualizer = null
+let topicAnalyzer = null
+let goldenQuoteAnalyzer = null
+let userTitleAnalyzer = null
 let configWatcher = null  // 配置文件监听器（单例）
 
 export class GroupManager extends plugin {
@@ -135,6 +147,42 @@ export class GroupManager extends plugin {
     summaryService = new SummaryService(globalConfig)
     summaryService.init(aiService, messageCollector)
 
+    // 初始化统计服务
+    const statsConfig = {
+      night_start_hour: globalConfig.statistics?.night_start_hour || 0,
+      night_end_hour: globalConfig.statistics?.night_end_hour || 6
+    }
+    statisticsService = new StatisticsService(statsConfig)
+
+    // 初始化活跃度可视化
+    activityVisualizer = new ActivityVisualizer(globalConfig.analysis?.activity || {})
+
+    // 初始化分析器
+    const analysisConfig = {
+      llm_timeout: globalConfig.ai?.llm_timeout || 100,
+      llm_retries: globalConfig.ai?.llm_retries || 2,
+      llm_backoff: globalConfig.ai?.llm_backoff || 2,
+      ...globalConfig.analysis?.topic,
+      ...globalConfig.analysis?.goldenQuote,
+      ...globalConfig.analysis?.userTitle,
+      min_messages_threshold: globalConfig.analysis?.min_messages_threshold || 20
+    }
+
+    topicAnalyzer = new TopicAnalyzer(aiService, analysisConfig)
+    goldenQuoteAnalyzer = new GoldenQuoteAnalyzer(aiService, analysisConfig)
+    userTitleAnalyzer = new UserTitleAnalyzer(aiService, analysisConfig)
+
+    // 显示功能状态
+    const enabledFeatures = []
+    if (globalConfig.analysis?.topic?.enabled !== false) enabledFeatures.push('话题分析')
+    if (globalConfig.analysis?.goldenQuote?.enabled !== false) enabledFeatures.push('金句提取')
+    if (globalConfig.analysis?.userTitle?.enabled !== false) enabledFeatures.push('用户称号')
+    if (globalConfig.analysis?.activity?.enabled !== false) enabledFeatures.push('活跃度图表')
+
+    if (enabledFeatures.length > 0) {
+      logger.info(`[群聊助手] 增强分析功能已启用: ${enabledFeatures.join('、')}`)
+    }
+
     // 显示定时总结状态
     const scheduleEnabled = globalConfig.schedule?.enabled !== false
     const whitelist = globalConfig.schedule?.whitelist || []
@@ -197,6 +245,28 @@ export class GroupManager extends plugin {
           // 重新初始化总结服务
           summaryService = new SummaryService(globalConfig)
           summaryService.init(aiService, messageCollector)
+
+          // 重新初始化统计和分析服务
+          const statsConfig = {
+            night_start_hour: globalConfig.statistics?.night_start_hour || 0,
+            night_end_hour: globalConfig.statistics?.night_end_hour || 6
+          }
+          statisticsService = new StatisticsService(statsConfig)
+          activityVisualizer = new ActivityVisualizer(globalConfig.analysis?.activity || {})
+
+          const analysisConfig = {
+            llm_timeout: globalConfig.ai?.llm_timeout || 100,
+            llm_retries: globalConfig.ai?.llm_retries || 2,
+            llm_backoff: globalConfig.ai?.llm_backoff || 2,
+            ...globalConfig.analysis?.topic,
+            ...globalConfig.analysis?.goldenQuote,
+            ...globalConfig.analysis?.userTitle,
+            min_messages_threshold: globalConfig.analysis?.min_messages_threshold || 20
+          }
+
+          topicAnalyzer = new TopicAnalyzer(aiService, analysisConfig)
+          goldenQuoteAnalyzer = new GoldenQuoteAnalyzer(aiService, analysisConfig)
+          userTitleAnalyzer = new UserTitleAnalyzer(aiService, analysisConfig)
 
           logger.mark('[群聊助手] 配置文件重新加载完成')
         } catch (err) {
@@ -513,6 +583,7 @@ export class GroupManager extends plugin {
 
   /**
    * 强制生成群聊总结（超级用户专用，会覆盖已有总结）
+   * 使用增强分析功能
    */
   async forceGenerateSummary(e) {
     if (!e.isGroup) {
@@ -520,12 +591,12 @@ export class GroupManager extends plugin {
       return false
     }
 
-    if (!summaryService) {
+    if (!messageCollector || !aiService) {
       await e.reply('总结功能未就绪', true)
       return false
     }
 
-    await e.reply('正在强制生成群聊总结，请稍候...')
+    await e.reply('正在生成增强分析报告，请稍候...')
 
     try {
       // 获取群名
@@ -537,30 +608,54 @@ export class GroupManager extends plugin {
         groupName = `群${e.group_id}`
       }
 
-      // 强制生成总结
-      const result = await summaryService.generateDailySummary(e.group_id, groupName, true)
+      // 获取今天的消息
+      const messages = await messageCollector.getMessages(e.group_id, 1)
 
-      if (!result.success) {
-        await e.reply(`强制生成总结失败: ${result.error}`, true)
+      if (messages.length === 0) {
+        await e.reply('今天还没有消息，无法生成分析报告', true)
         return false
       }
 
-      logger.info(`[群聊助手] 超级用户 ${e.user_id} 强制生成了群 ${e.group_id} 的总结`)
+      logger.info(`[群聊助手] 超级用户 ${e.user_id} 强制生成群 ${e.group_id} 的增强分析 (消息数: ${messages.length})`)
 
-      // 发送总结结果
-      await this.sendSummaryResult(e, {
-        content: result.summary,
-        messageCount: result.messageCount,
-        lastUpdateHour: result.hour,
-        date: result.date,
-        provider: result.provider,
-        model: result.model
-      }, groupName)
+      // 执行增强分析
+      const analysisResults = await this.performEnhancedAnalysis(messages, 1)
+
+      if (!analysisResults) {
+        await e.reply('分析失败，请查看日志', true)
+        return false
+      }
+
+      // 渲染增强报告
+      const img = await this.renderEnhancedSummary(analysisResults, {
+        groupName,
+        provider: aiService.provider,
+        model: aiService.model
+      })
+
+      if (img) {
+        await e.reply(img)
+      } else {
+        // 渲染失败，发送文本总结
+        let textSummary = `📊 群聊分析报告\n\n`
+        textSummary += `消息总数: ${analysisResults.stats.basic.totalMessages}\n`
+        textSummary += `参与人数: ${analysisResults.stats.basic.totalUsers}\n`
+        textSummary += `日期范围: ${analysisResults.stats.basic.dateRange.start} ~ ${analysisResults.stats.basic.dateRange.end}\n\n`
+
+        if (analysisResults.topics.length > 0) {
+          textSummary += `💬 热门话题:\n`
+          analysisResults.topics.forEach((topic, i) => {
+            textSummary += `${i + 1}. ${topic.topic}\n`
+          })
+        }
+
+        await e.reply(textSummary, true)
+      }
 
       return true
     } catch (err) {
       logger.error(`[群聊助手] 强制生成总结错误: ${err}`)
-      await e.reply(`强制生成总结失败: ${err.message}`, true)
+      await e.reply(`生成分析失败: ${err.message}`, true)
       return false
     }
   }
@@ -676,6 +771,175 @@ export class GroupManager extends plugin {
       return img
     } catch (err) {
       logger.error(`[群聊助手] 渲染总结失败: ${err}`)
+      return null
+    }
+  }
+
+  /**
+   * 执行增强分析
+   * @param {Array} messages - 消息列表
+   * @param {number} days - 天数
+   * @returns {Object} 分析结果
+   */
+  async performEnhancedAnalysis(messages, days = 1) {
+    try {
+      logger.info(`[群聊助手] 开始增强分析 (消息数: ${messages.length})`)
+
+      // 1. 基础统计分析
+      const stats = statisticsService.analyze(messages)
+      logger.info(`[群聊助手] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
+
+      // 检查是否满足最小消息数阈值
+      const minThreshold = globalConfig.analysis?.min_messages_threshold || 20
+      if (messages.length < minThreshold) {
+        logger.warn(`[群聊助手] 消息数 (${messages.length}) 少于阈值 (${minThreshold}), 跳过 AI 分析`)
+        return {
+          stats,
+          topics: [],
+          goldenQuotes: [],
+          userTitles: [],
+          skipped: true,
+          reason: `消息数不足 (需要至少 ${minThreshold} 条)`
+        }
+      }
+
+      // 2. 并行执行三个 AI 分析
+      const analysisPromises = []
+
+      // 话题分析
+      if (globalConfig.analysis?.topic?.enabled !== false) {
+        analysisPromises.push(
+          topicAnalyzer.analyze(messages, stats)
+            .then(topics => ({ type: 'topics', data: topics }))
+            .catch(err => {
+              logger.error(`[群聊助手] 话题分析失败: ${err}`)
+              return { type: 'topics', data: [] }
+            })
+        )
+      }
+
+      // 金句提取
+      if (globalConfig.analysis?.goldenQuote?.enabled !== false) {
+        analysisPromises.push(
+          goldenQuoteAnalyzer.analyze(messages, stats)
+            .then(quotes => ({ type: 'goldenQuotes', data: quotes }))
+            .catch(err => {
+              logger.error(`[群聊助手] 金句提取失败: ${err}`)
+              return { type: 'goldenQuotes', data: [] }
+            })
+        )
+      }
+
+      // 用户称号
+      if (globalConfig.analysis?.userTitle?.enabled !== false) {
+        analysisPromises.push(
+          userTitleAnalyzer.analyze(messages, stats)
+            .then(titles => ({ type: 'userTitles', data: titles }))
+            .catch(err => {
+              logger.error(`[群聊助手] 用户称号分析失败: ${err}`)
+              return { type: 'userTitles', data: [] }
+            })
+        )
+      }
+
+      // 等待所有分析完成
+      const results = await Promise.all(analysisPromises)
+
+      // 整合结果
+      const analysisResults = {
+        stats,
+        topics: [],
+        goldenQuotes: [],
+        userTitles: [],
+        skipped: false
+      }
+
+      for (const result of results) {
+        analysisResults[result.type] = result.data
+      }
+
+      logger.info(`[群聊助手] 增强分析完成 - 话题: ${analysisResults.topics.length}, 金句: ${analysisResults.goldenQuotes.length}, 称号: ${analysisResults.userTitles.length}`)
+
+      return analysisResults
+    } catch (err) {
+      logger.error(`[群聊助手] 增强分析失败: ${err}`)
+      return null
+    }
+  }
+
+  /**
+   * 渲染增强总结
+   * @param {Object} analysisResults - 分析结果
+   * @param {Object} options - 渲染选项
+   * @returns {Buffer} 图片 Buffer
+   */
+  async renderEnhancedSummary(analysisResults, options) {
+    try {
+      const { stats, topics, goldenQuotes, userTitles } = analysisResults
+
+      // 生成活跃度图表 HTML
+      const activityChart = globalConfig.analysis?.activity?.enabled !== false
+        ? activityVisualizer.generateChart(stats.hourly)
+        : ''
+
+      // 获取活跃度样式
+      const activityStyles = ActivityVisualizer.getStyles()
+
+      // 格式化日期范围
+      const dateRange = stats.basic.dateRange.start === stats.basic.dateRange.end
+        ? stats.basic.dateRange.start
+        : `${stats.basic.dateRange.start} ~ ${stats.basic.dateRange.end}`
+
+      // 获取渲染质量配置
+      const renderConfig = globalConfig.summary?.render || {}
+      const imgType = renderConfig.imgType || 'png'
+      const quality = renderConfig.quality || 100
+
+      const templateData = {
+        provider: options.provider === 'claude' ? 'Claude' : options.provider === 'openai' ? 'OpenAI' : options.provider || 'AI',
+        model: options.model || '',
+        groupName: options.groupName || '未知群聊',
+
+        // 基础统计
+        totalMessages: stats.basic.totalMessages,
+        totalUsers: stats.basic.totalUsers,
+        totalChars: stats.basic.totalChars,
+        totalEmojis: stats.basic.totalEmojis,
+        avgLength: stats.basic.avgCharsPerMsg,
+        dateRange,
+        peakPeriod: stats.hourly.peakPeriod,
+
+        // 活跃度图表
+        enableActivityChart: globalConfig.analysis?.activity?.enabled !== false,
+        activityChart,
+        activityStyles,
+
+        // AI 分析结果
+        topics,
+        goldenQuotes,
+        userTitles,
+
+        // 传统总结 (如果有)
+        summaryHtml: options.summaryHtml || '',
+
+        // 元数据
+        createTime: moment().format('YYYY-MM-DD HH:mm:ss'),
+        tokenUsage: options.tokenUsage || null,
+
+        pluResPath: join(__dirname, 'resources') + '/'
+      }
+
+      // 使用增强模板渲染
+      const img = await puppeteer.screenshot('group-insight-enhanced', {
+        tplFile: join(__dirname, 'resources/summary/enhanced.html'),
+        imgType,
+        quality,
+        ...templateData
+      })
+
+      return img
+    } catch (err) {
+      logger.error(`[群聊助手] 渲染增强总结失败: ${err}`)
       return null
     }
   }
