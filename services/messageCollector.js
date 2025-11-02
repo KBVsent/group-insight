@@ -53,9 +53,14 @@ export default class MessageCollector {
     // 提取消息内容
     const message = this.extractMessage(e)
 
-    // 更新图片 rkey（异步执行，不阻塞消息处理）
-    if (message.images.length > 0) {
-      this.rkeyManager.updateBatch(message.images).catch(err => {
+    // 更新图片和动画表情的 rkey（异步执行，不阻塞消息处理）
+    const allImageUrls = [
+      ...message.images,                    // 普通图片
+      ...(message.faces.mface || [])        // 动画表情
+    ]
+
+    if (allImageUrls.length > 0) {
+      this.rkeyManager.updateBatch(allImageUrls).catch(err => {
         logger.error(`[群聊助手] 更新 rkey 失败: ${err}`)
       })
     }

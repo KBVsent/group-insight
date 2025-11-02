@@ -330,9 +330,9 @@ export class GroupManager extends plugin {
         msg.push(record.message)
       }
 
-      // 添加表情
-      if (record.faces && record.faces.length > 0) {
-        for (const faceId of record.faces) {
+      // 添加普通表情（QQ 系统表情，不需要刷新 rkey）
+      if (record.faces && record.faces.face && record.faces.face.length > 0) {
+        for (const faceId of record.faces.face) {
           msg.push(segment.face(faceId))
         }
       }
@@ -347,6 +347,19 @@ export class GroupManager extends plugin {
         for (const imgUrl of refreshedUrls) {
           logger.debug(`[群聊助手] 添加图片: ${imgUrl.substring(0, 100)}...`)
           msg.push(segment.image(imgUrl))
+        }
+      }
+
+      // 添加动画表情（刷新 rkey 以避免链接过期）
+      if (record.faces && record.faces.mface && record.faces.mface.length > 0) {
+        logger.debug(`[群聊助手] 构建消息 - 动画表情数: ${record.faces.mface.length}`)
+
+        // 批量刷新所有动画表情 URL
+        const refreshedMfaces = await rkeyManager.refreshBatch(record.faces.mface)
+
+        for (const mfaceUrl of refreshedMfaces) {
+          logger.debug(`[群聊助手] 添加动画表情: ${mfaceUrl.substring(0, 100)}...`)
+          msg.push(segment.image(mfaceUrl))
         }
       }
 
