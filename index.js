@@ -229,16 +229,17 @@ export class GroupManager extends plugin {
           // 重新加载配置
           globalConfig = await loadConfig()
 
+          // 停止旧的消息收集器
+          if (messageCollector) {
+            messageCollector.stopCollecting()
+          }
+
           // 重新初始化服务
           if (globalConfig.messageCollection?.enabled !== false) {
-            if (messageCollector) {
-              // 更新现有收集器的配置
-              messageCollector.config = globalConfig
-            } else {
-              // 如果之前未启用，现在创建
-              messageCollector = new MessageCollector(globalConfig)
-              messageCollector.startCollecting()
-            }
+            messageCollector = new MessageCollector(globalConfig)
+            messageCollector.startCollecting()
+          } else {
+            messageCollector = null
           }
 
           // 重新初始化词云生成器
@@ -300,7 +301,8 @@ export class GroupManager extends plugin {
     // 确定查询的用户
     let userId = e.user_id
     if (e.atBot) {
-      userId = Bot.uin
+      // Bot.uin 是数组，取第一个或使用 e.self_id
+      userId = Array.isArray(Bot.uin) ? Bot.uin[0] : (e.self_id || Bot.uin)
     } else if (e.at) {
       userId = e.at
     }
@@ -331,9 +333,14 @@ export class GroupManager extends plugin {
       }
 
       // 添加普通表情（QQ 系统表情，不需要刷新 rkey）
+      // 注意：segment.face 支持取决于协议适配器，部分适配器可能不支持
       if (record.faces && record.faces.face && record.faces.face.length > 0) {
         for (const faceId of record.faces.face) {
-          msg.push(segment.face(faceId))
+          try {
+            msg.push(segment.face(faceId))
+          } catch (err) {
+            logger.debug(`[群聊助手] 发送表情失败 (face ${faceId}): ${err.message}`)
+          }
         }
       }
 
@@ -373,25 +380,38 @@ export class GroupManager extends plugin {
     }
 
     // 发送合并转发消息
-    const forwardMsg = await e.group.makeForwardMsg(msgList)
-
-    // 处理合并转发的标题
-    if (typeof forwardMsg.data === 'object') {
-      // 对象格式：直接修改属性（推荐方式）
-      const detail = forwardMsg.data?.meta?.detail
-      if (detail) {
-        detail.news = [{ text: '点击查看谁艾特了你' }]
+    let forwardMsg
+    try {
+      // 优先使用 e.group.makeForwardMsg（推荐方式）
+      if (e.group && e.group.makeForwardMsg) {
+        forwardMsg = await e.group.makeForwardMsg(msgList)
+      } else {
+        // 降级方案：使用 Bot.makeForwardMsg
+        forwardMsg = await Bot.makeForwardMsg(msgList)
       }
-    } else if (typeof forwardMsg.data === 'string') {
-      // 字符串格式（XML）：一次性替换标题
-      forwardMsg.data = forwardMsg.data.replace(
-        /<title color="#777777" size="26">.*?<\/title>/,
-        '<title color="#777777" size="26">点击查看谁艾特了你</title>'
-      )
-    }
 
-    await e.reply(forwardMsg)
-    return true
+      // 处理合并转发的标题
+      if (typeof forwardMsg.data === 'object') {
+        // 对象格式：直接修改属性（推荐方式）
+        const detail = forwardMsg.data?.meta?.detail
+        if (detail) {
+          detail.news = [{ text: '点击查看谁艾特了你' }]
+        }
+      } else if (typeof forwardMsg.data === 'string') {
+        // 字符串格式（XML）：一次性替换标题
+        forwardMsg.data = forwardMsg.data.replace(
+          /<title color="#777777" size="26">.*?<\/title>/,
+          '<title color="#777777" size="26">点击查看谁艾特了你</title>'
+        )
+      }
+
+      await e.reply(forwardMsg)
+      return true
+    } catch (err) {
+      logger.error(`[群聊助手] 发送合并转发消息失败: ${err}`)
+      await e.reply('发送消息失败，请查看日志', true)
+      return false
+    }
   }
 
   /**
@@ -459,7 +479,7 @@ export class GroupManager extends plugin {
   }
 
   /**
-   * 定时任务：每小时生成群聊总结
+   * 定时任务：每小时生成群聊总结（带并发控制）
    */
   async scheduledSummary() {
     if (!summaryService || !messageCollector) {
@@ -471,6 +491,7 @@ export class GroupManager extends plugin {
     const enabled = scheduleConfig.enabled !== false
     const whitelist = scheduleConfig.whitelist || []
     const minMessages = scheduleConfig.minMessages || 99  // 最小消息数阈值，默认99条
+    const concurrency = scheduleConfig.concurrency || 3    // 并发数，默认3个
 
     // 检查是否启用
     if (!enabled || whitelist.length === 0) {
@@ -478,47 +499,91 @@ export class GroupManager extends plugin {
       return
     }
 
-    logger.mark('[群聊助手] 开始执行定时总结任务')
+    logger.mark(`[群聊助手] 开始执行定时总结任务 (白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
 
-    // 遍历白名单群
-    for (const groupId of whitelist) {
-      try {
-        // 先检查消息数量
-        const messages = await messageCollector.getMessages(groupId, 1)
-
-        if (messages.length < minMessages) {
-          logger.debug(`[群聊助手] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过总结`)
-          continue
-        }
-
-        // 获取群名
-        let groupName = `群${groupId}`
+    // 使用并发限制处理白名单群
+    const results = await this.runWithConcurrency(
+      whitelist,
+      async (groupId) => {
         try {
-          const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
-          const group = bot.pickGroup?.(groupId)
-          if (group) {
-            const groupInfo = await group.getInfo?.()
-            groupName = groupInfo?.group_name || groupInfo?.name || groupName
+          // 先检查消息数量
+          const messages = await messageCollector.getMessages(groupId, 1)
+
+          if (messages.length < minMessages) {
+            logger.debug(`[群聊助手] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过总结`)
+            return { groupId, status: 'skipped', reason: 'insufficient_messages' }
+          }
+
+          // 获取群名
+          let groupName = `群${groupId}`
+          try {
+            const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
+            const group = bot.pickGroup?.(groupId)
+            if (group) {
+              const groupInfo = await group.getInfo?.()
+              groupName = groupInfo?.group_name || groupInfo?.name || groupName
+            }
+          } catch (err) {
+            logger.debug(`[群聊助手] 获取群 ${groupId} 名称失败，使用默认名称`)
+          }
+
+          // 生成总结
+          logger.info(`[群聊助手] 正在为群 ${groupId} (${groupName}) 生成总结 (消息数: ${messages.length})`)
+          const result = await summaryService.generateDailySummary(groupId, groupName, false)
+
+          if (result.success) {
+            logger.mark(`[群聊助手] 群 ${groupId} 总结生成成功 (${result.messageCount} 条消息)`)
+            return { groupId, status: 'success', messageCount: result.messageCount }
+          } else {
+            logger.warn(`[群聊助手] 群 ${groupId} 总结生成失败: ${result.error}`)
+            return { groupId, status: 'failed', error: result.error }
           }
         } catch (err) {
-          logger.debug(`[群聊助手] 获取群 ${groupId} 名称失败，使用默认名称`)
+          logger.error(`[群聊助手] 群 ${groupId} 定时总结异常: ${err}`)
+          return { groupId, status: 'error', error: err.message }
         }
+      },
+      concurrency
+    )
 
-        // 生成总结
-        logger.info(`[群聊助手] 正在为群 ${groupId} (${groupName}) 生成总结 (消息数: ${messages.length})`)
-        const result = await summaryService.generateDailySummary(groupId, groupName, false)
+    // 统计结果
+    const summary = {
+      total: results.length,
+      success: results.filter(r => r.status === 'success').length,
+      failed: results.filter(r => r.status === 'failed').length,
+      skipped: results.filter(r => r.status === 'skipped').length,
+      error: results.filter(r => r.status === 'error').length
+    }
 
-        if (result.success) {
-          logger.mark(`[群聊助手] 群 ${groupId} 总结生成成功 (${result.messageCount} 条消息)`)
-        } else {
-          logger.warn(`[群聊助手] 群 ${groupId} 总结生成失败: ${result.error}`)
+    logger.mark(`[群聊助手] 定时总结任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
+  }
+
+  /**
+   * 并发限制执行器
+   * @param {Array} items - 待处理的项目数组
+   * @param {Function} handler - 处理函数
+   * @param {number} concurrency - 并发数
+   * @returns {Promise<Array>} 处理结果数组
+   */
+  async runWithConcurrency(items, handler, concurrency = 3) {
+    const results = []
+    const executing = []
+
+    for (const item of items) {
+      const promise = Promise.resolve().then(() => handler(item))
+      results.push(promise)
+
+      if (concurrency <= items.length) {
+        const e = promise.then(() => executing.splice(executing.indexOf(e), 1))
+        executing.push(e)
+
+        if (executing.length >= concurrency) {
+          await Promise.race(executing)
         }
-      } catch (err) {
-        logger.error(`[群聊助手] 群 ${groupId} 定时总结异常: ${err}`)
       }
     }
 
-    logger.mark('[群聊助手] 定时总结任务执行完成')
+    return Promise.all(results)
   }
 
   /**
@@ -1107,9 +1172,3 @@ export class GroupManager extends plugin {
     return true
   }
 }
-
-// 创建插件实例并初始化
-const groupManager = new GroupManager()
-await groupManager.init()
-
-export { groupManager }

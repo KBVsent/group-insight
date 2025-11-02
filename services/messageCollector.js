@@ -26,6 +26,7 @@ export default class MessageCollector {
 
     // 防止重复注册监听器
     this.isCollecting = false
+    this.handler = null  // 保存处理器引用，用于移除监听器
 
     logger.info(`[群聊助手] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}`)
     if (this.whitelist.length > 0) {
@@ -43,16 +44,37 @@ export default class MessageCollector {
       return
     }
 
-    Bot.on('message.group', async (e) => {
+    // 保存处理器引用，以便后续移除
+    this.handler = async (e) => {
       try {
         await this.handleMessage(e)
       } catch (err) {
         logger.error(`[群聊助手] 消息收集失败: ${err}`)
       }
-    })
+    }
 
+    Bot.on('message.group', this.handler)
     this.isCollecting = true
+
     logger.info('[群聊助手] 消息收集器已启动')
+  }
+
+  /**
+   * 停止监听群消息
+   */
+  stopCollecting() {
+    if (!this.handler) {
+      return
+    }
+
+    try {
+      Bot.off('message.group', this.handler)
+      this.handler = null
+      this.isCollecting = false
+      logger.info('[群聊助手] 消息收集器已停止')
+    } catch (err) {
+      logger.error(`[群聊助手] 停止收集器时发生错误: ${err}`)
+    }
   }
 
   /**
@@ -125,14 +147,14 @@ export default class MessageCollector {
           if (mfaceUrl) {
             faces.mface.push(mfaceUrl)
             faces.total++
-            logger.debug(`[群聊助手] 收集动画表情: ${msg.summary}, URL: ${mfaceUrl.substring(0, 100)}`)
+            logger.debug(`[群聊助手] 收集动画表情: ${msg.summary}`)
           }
         } else if (this.collectImages) {
           // 普通图片
           const imgUrl = msg.url || msg.file
           if (imgUrl) {
             images.push(imgUrl)
-            logger.debug(`[群聊助手] 收集图片: ${imgUrl.substring(0, 100)}`)
+            logger.debug(`[群聊助手] 收集图片`)
           }
         }
       } else if (msg.type === 'reply') {
@@ -286,7 +308,6 @@ export default class MessageCollector {
         messageId: replyMessageId
       }
 
-      logger.debug(`[群聊助手] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${message.faces.total}`)
       await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
     }
   }

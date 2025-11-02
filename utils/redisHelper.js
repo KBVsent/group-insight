@@ -43,9 +43,14 @@ export default class RedisHelper {
     // 添加到列表
     await redis.rPush(key, data)
 
-    // 设置过期时间
-    const expireSeconds = this.retentionDays * 24 * 60 * 60
-    await redis.expire(key, expireSeconds)
+    // 只在首次创建 key 时设置过期时间，避免每次都重置导致消息永不过期
+    const ttl = await redis.ttl(key)
+    if (ttl === -1) {
+      // key 存在但没有过期时间，设置过期时间
+      const expireSeconds = this.retentionDays * 24 * 60 * 60
+      await redis.expire(key, expireSeconds)
+      logger.debug(`[群聊助手] 为消息 key 设置过期时间: ${key} (${this.retentionDays} 天)`)
+    }
   }
 
   /**
@@ -75,31 +80,48 @@ export default class RedisHelper {
 
   /**
    * 保存艾特记录
+   * 使用简单的 GET-SET 方式，配合 Redis 单线程特性保证基本一致性
    * @param {string} groupId - 群号
    * @param {string} userId - 被艾特的用户ID
    * @param {object} atData - 艾特数据
    */
   async saveAtRecord(groupId, userId, atData) {
     const key = this.getAtKey(groupId, userId)
-    let data = await redis.get(key)
 
     // 计算过期时间
     const expireTime = moment().add(this.atRetentionHours, 'hours').format('YYYY-MM-DD HH:mm:ss')
     const expireSeconds = Math.floor((new Date(expireTime) - new Date()) / 1000)
 
-    if (data) {
-      // 已有数据，追加
-      try {
-        const records = JSON.parse(data)
-        records.push(atData)
-        await redis.set(key, JSON.stringify(records), { EX: expireSeconds })
-      } catch (err) {
-        logger.error(`[群聊助手] 保存艾特记录失败: ${err}`)
+    // 添加过期时间到数据中
+    atData.endTime = expireTime
+
+    try {
+      // 获取现有数据
+      const data = await redis.get(key)
+      let records = []
+
+      if (data) {
+        try {
+          records = JSON.parse(data)
+          // 确保是数组
+          if (!Array.isArray(records)) {
+            records = []
+          }
+        } catch (parseErr) {
+          logger.error(`[群聊助手] 解析艾特记录失败: ${parseErr}，将重置记录`)
+          records = []
+        }
       }
-    } else {
-      // 新建数据
-      atData.endTime = expireTime
-      await redis.set(key, JSON.stringify([atData]), { EX: expireSeconds })
+
+      // 添加新记录
+      records.push(atData)
+
+      // 保存回 Redis
+      await redis.set(key, JSON.stringify(records), { EX: expireSeconds })
+
+      logger.debug(`[群聊助手] 保存艾特记录成功，当前记录数: ${records.length}`)
+    } catch (err) {
+      logger.error(`[群聊助手] 保存艾特记录失败: ${err}`)
     }
   }
 

@@ -164,15 +164,51 @@ export default class ImageRkeyManager {
   }
 
   /**
-   * 批量刷新多个图片 URL
+   * 批量刷新多个图片 URL（优化版：只查询一次 Redis）
    * @param {string[]} urls - 需要刷新的旧 URL 数组
    * @returns {Promise<string[]>} 刷新后的 URL 数组
    */
   async refreshBatch(urls) {
     if (!Array.isArray(urls) || urls.length === 0) return urls
 
-    const promises = urls.map(url => this.refreshUrl(url))
-    return await Promise.all(promises)
+    try {
+      // 优化：只查询一次 Redis，而不是每个 URL 都查询一次
+      const latestRkey = await redis.get(this.latestRkeyKey)
+
+      if (!latestRkey) {
+        logger.warn(`[ImageRkeyManager] 未找到最新的通用 rkey，返回原 URL`)
+        return urls
+      }
+
+      // 批量处理所有 URL
+      const refreshedUrls = urls.map(url => {
+        if (!url) return url
+
+        const fileid = this.extractFileId(url)
+        if (!fileid) {
+          // URL 不包含 fileid，直接返回原 URL
+          return url
+        }
+
+        const baseUrl = this.extractBaseUrl(url)
+        const otherParams = this.extractOtherParams(url)
+
+        if (!baseUrl) {
+          logger.warn(`[ImageRkeyManager] 无法解析 URL: ${url.substring(0, 100)}`)
+          return url
+        }
+
+        // 组装新 URL: baseUrl + otherParams + &rkey=latestRkey
+        const separator = otherParams.includes('?') ? '&' : '?'
+        return `${baseUrl}${otherParams}${separator}rkey=${latestRkey}`
+      })
+
+      logger.debug(`[ImageRkeyManager] 批量刷新 ${urls.length} 个 URL 完成`)
+      return refreshedUrls
+    } catch (err) {
+      logger.error(`[ImageRkeyManager] 批量刷新 URL 失败: ${err}`)
+      return urls
+    }
   }
 
   /**

@@ -238,55 +238,81 @@ ${messagesText}
     }
 
     try {
-      let content = ''
-      let usage = null
+      // 创建超时 Promise
+      const timeoutMs = timeout * 1000
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`AI 请求超时 (${timeout}秒)`))
+        }, timeoutMs)
+      })
 
-      switch (this.provider) {
-        case 'claude': {
-          const response = await this.client.messages.create({
-            model: this.model,
-            max_tokens: maxTokens,
-            temperature,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }]
-          })
-          content = response.content[0].text
-          usage = {
-            prompt_tokens: response.usage?.input_tokens || 0,
-            completion_tokens: response.usage?.output_tokens || 0,
-            total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
-          }
-          break
-        }
-        case 'openai': {
-          const response = await this.client.chat.completions.create({
-            model: this.model,
-            max_tokens: maxTokens,
-            temperature,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }]
-          })
-          content = response.choices[0].message.content
-          usage = {
-            prompt_tokens: response.usage?.prompt_tokens || 0,
-            completion_tokens: response.usage?.completion_tokens || 0,
-            total_tokens: response.usage?.total_tokens || 0
-          }
-          break
-        }
-        default:
-          throw new Error(`不支持的 AI 提供商: ${this.provider}`)
-      }
+      // 创建请求 Promise
+      const requestPromise = this._makeRequest(prompt, maxTokens, temperature)
 
-      return { content, usage }
+      // 使用 Promise.race 实现超时控制
+      const result = await Promise.race([requestPromise, timeoutPromise])
+
+      return result
     } catch (err) {
-      logger.error(`[AIService] Chat 调用失败: ${err.message}`)
+      if (err.message.includes('超时')) {
+        logger.error(`[AIService] AI 请求超时 (${timeout}秒): ${prompt.substring(0, 100)}...`)
+      } else {
+        logger.error(`[AIService] Chat 调用失败: ${err.message}`)
+      }
       throw err
     }
+  }
+
+  /**
+   * 执行实际的 AI 请求（内部方法）
+   * @private
+   */
+  async _makeRequest(prompt, maxTokens, temperature) {
+    let content = ''
+    let usage = null
+
+    switch (this.provider) {
+      case 'claude': {
+        const response = await this.client.messages.create({
+          model: this.model,
+          max_tokens: maxTokens,
+          temperature,
+          messages: [{
+            role: 'user',
+            content: prompt
+          }]
+        })
+        content = response.content[0].text
+        usage = {
+          prompt_tokens: response.usage?.input_tokens || 0,
+          completion_tokens: response.usage?.output_tokens || 0,
+          total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
+        }
+        break
+      }
+      case 'openai': {
+        const response = await this.client.chat.completions.create({
+          model: this.model,
+          max_tokens: maxTokens,
+          temperature,
+          messages: [{
+            role: 'user',
+            content: prompt
+          }]
+        })
+        content = response.choices[0].message.content
+        usage = {
+          prompt_tokens: response.usage?.prompt_tokens || 0,
+          completion_tokens: response.usage?.completion_tokens || 0,
+          total_tokens: response.usage?.total_tokens || 0
+        }
+        break
+      }
+      default:
+        throw new Error(`不支持的 AI 提供商: ${this.provider}`)
+    }
+
+    return { content, usage }
   }
 
   /**
