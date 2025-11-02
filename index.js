@@ -60,6 +60,7 @@ let messageCollector = null
 let wordCloudGenerator = null
 let aiService = null
 let summaryService = null
+let configWatcher = null  // 配置文件监听器（单例）
 
 export class GroupManager extends plugin {
   constructor() {
@@ -153,16 +154,22 @@ export class GroupManager extends plugin {
    * 监听配置文件变化
    */
   watchConfig() {
+    // 如果已经有监听器，直接返回（避免重复注册）
+    if (configWatcher) {
+      logger.debug('[群聊助手] 配置文件监听器已存在，跳过注册')
+      return
+    }
+
     const configPath = join(__dirname, 'config/config.yaml')
 
     // 只监听用户配置文件（不监听默认配置文件）
     if (fs.existsSync(configPath)) {
-      const watcher = chokidar.watch(configPath, {
+      configWatcher = chokidar.watch(configPath, {
         persistent: true,
         ignoreInitial: true
       })
 
-      watcher.on('change', async () => {
+      configWatcher.on('change', async () => {
         logger.mark('[群聊助手] 检测到配置文件修改，正在重新加载...')
 
         try {
