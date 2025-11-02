@@ -5,6 +5,7 @@
  */
 
 import RedisHelper from '../utils/redisHelper.js'
+import ImageRkeyManager from '../utils/imageRkeyManager.js'
 
 export default class MessageCollector {
   constructor(config) {
@@ -14,6 +15,7 @@ export default class MessageCollector {
       config.retentionDays || 7,
       config.atRetentionHours || 24
     )
+    this.rkeyManager = new ImageRkeyManager()
     this.maxMessageLength = msgConfig.maxMessageLength || 500
     this.collectImages = msgConfig.collectImages !== undefined ? msgConfig.collectImages : false
     this.collectFaces = msgConfig.collectFaces !== undefined ? msgConfig.collectFaces : false
@@ -50,6 +52,13 @@ export default class MessageCollector {
   async handleMessage(e) {
     // 提取消息内容
     const message = this.extractMessage(e)
+
+    // 更新图片 rkey（异步执行，不阻塞消息处理）
+    if (message.images.length > 0) {
+      this.rkeyManager.updateBatch(message.images).catch(err => {
+        logger.error(`[群聊助手] 更新 rkey 失败: ${err}`)
+      })
+    }
 
     // 保存消息
     if (message.text) {
@@ -298,5 +307,13 @@ export default class MessageCollector {
    */
   getWhitelistGroups() {
     return this.whitelist.map(id => String(id))
+  }
+
+  /**
+   * 获取 rkey 管理器实例
+   * @returns {ImageRkeyManager} rkey 管理器
+   */
+  getRkeyManager() {
+    return this.rkeyManager
   }
 }

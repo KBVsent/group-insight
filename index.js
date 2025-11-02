@@ -315,6 +315,7 @@ export class GroupManager extends plugin {
 
     // 构建合并转发消息
     const msgList = []
+    const rkeyManager = messageCollector.getRkeyManager()
 
     for (const record of records) {
       const msg = []
@@ -336,11 +337,15 @@ export class GroupManager extends plugin {
         }
       }
 
-      // 添加图片
+      // 添加图片（刷新 rkey 以避免链接过期）
       if (record.images && record.images.length > 0) {
         logger.debug(`[群聊助手] 构建消息 - 图片数: ${record.images.length}`)
-        for (const imgUrl of record.images) {
-          logger.debug(`[群聊助手] 添加图片: ${imgUrl}`)
+
+        // 批量刷新所有图片 URL
+        const refreshedUrls = await rkeyManager.refreshBatch(record.images)
+
+        for (const imgUrl of refreshedUrls) {
+          logger.debug(`[群聊助手] 添加图片: ${imgUrl.substring(0, 100)}...`)
           msg.push(segment.image(imgUrl))
         }
       }
