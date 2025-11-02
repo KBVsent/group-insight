@@ -64,7 +64,7 @@ export default class BaseAnalyzer {
       // 尝试直接解析
       return JSON.parse(content)
     } catch (err) {
-      logger.debug(`[${this.constructor.name}] 直接解析 JSON 失败,尝试修复...`)
+      // 使用回退策略提取 JSON（不输出日志，避免干扰）
     }
 
     try {
