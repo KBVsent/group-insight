@@ -700,7 +700,8 @@ export class GroupManager extends plugin {
       const img = await this.renderEnhancedSummary(analysisResults, {
         groupName,
         provider: aiService.provider,
-        model: aiService.model
+        model: aiService.model,
+        tokenUsage: analysisResults.tokenUsage || null
       })
 
       if (img) {
@@ -900,10 +901,10 @@ export class GroupManager extends plugin {
       if (globalConfig.analysis?.topic?.enabled !== false) {
         analysisPromises.push(
           topicAnalyzer.analyze(messages, stats)
-            .then(topics => ({ type: 'topics', data: topics }))
+            .then(result => ({ type: 'topics', data: result.topics, usage: result.usage }))
             .catch(err => {
               logger.error(`[群聊助手] 话题分析失败: ${err}`)
-              return { type: 'topics', data: [] }
+              return { type: 'topics', data: [], usage: null }
             })
         )
       }
@@ -912,10 +913,10 @@ export class GroupManager extends plugin {
       if (globalConfig.analysis?.goldenQuote?.enabled !== false) {
         analysisPromises.push(
           goldenQuoteAnalyzer.analyze(messages, stats)
-            .then(quotes => ({ type: 'goldenQuotes', data: quotes }))
+            .then(result => ({ type: 'goldenQuotes', data: result.goldenQuotes, usage: result.usage }))
             .catch(err => {
               logger.error(`[群聊助手] 金句提取失败: ${err}`)
-              return { type: 'goldenQuotes', data: [] }
+              return { type: 'goldenQuotes', data: [], usage: null }
             })
         )
       }
@@ -924,10 +925,10 @@ export class GroupManager extends plugin {
       if (globalConfig.analysis?.userTitle?.enabled !== false) {
         analysisPromises.push(
           userTitleAnalyzer.analyze(messages, stats)
-            .then(titles => ({ type: 'userTitles', data: titles }))
+            .then(result => ({ type: 'userTitles', data: result.userTitles, usage: result.usage }))
             .catch(err => {
               logger.error(`[群聊助手] 用户称号分析失败: ${err}`)
-              return { type: 'userTitles', data: [] }
+              return { type: 'userTitles', data: [], usage: null }
             })
         )
       }
@@ -941,14 +942,26 @@ export class GroupManager extends plugin {
         topics: [],
         goldenQuotes: [],
         userTitles: [],
-        skipped: false
+        skipped: false,
+        tokenUsage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
+        }
       }
 
       for (const result of results) {
         analysisResults[result.type] = result.data
+
+        // 累加 token 使用情况
+        if (result.usage) {
+          analysisResults.tokenUsage.prompt_tokens += result.usage.prompt_tokens || 0
+          analysisResults.tokenUsage.completion_tokens += result.usage.completion_tokens || 0
+          analysisResults.tokenUsage.total_tokens += result.usage.total_tokens || 0
+        }
       }
 
-      logger.info(`[群聊助手] 增强分析完成 - 话题: ${analysisResults.topics.length}, 金句: ${analysisResults.goldenQuotes.length}, 称号: ${analysisResults.userTitles.length}`)
+      logger.info(`[群聊助手] 增强分析完成 - 话题: ${analysisResults.topics.length}, 金句: ${analysisResults.goldenQuotes.length}, 称号: ${analysisResults.userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
 
       return analysisResults
     } catch (err) {
@@ -982,6 +995,13 @@ export class GroupManager extends plugin {
       const imgType = renderConfig.imgType || 'png'
       const quality = renderConfig.quality || 100
 
+      // 格式化 token 使用情况
+      const tokenUsage = options.tokenUsage ? {
+        prompt: options.tokenUsage.prompt_tokens || 0,
+        completion: options.tokenUsage.completion_tokens || 0,
+        total: options.tokenUsage.total_tokens || 0
+      } : null
+
       const templateData = {
         provider: options.provider === 'claude' ? 'Claude' : options.provider === 'openai' ? 'OpenAI' : options.provider || 'AI',
         model: options.model || '',
@@ -1010,7 +1030,7 @@ export class GroupManager extends plugin {
 
         // 元数据
         createTime: moment().format('YYYY-MM-DD HH:mm:ss'),
-        tokenUsage: options.tokenUsage || null,
+        tokenUsage,
 
         pluResPath: join(__dirname, 'resources') + '/'
       }

@@ -17,12 +17,12 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
    * 执行金句提取
    * @param {Array} messages - 消息列表
    * @param {Object} stats - 统计信息 (可选)
-   * @returns {Promise<Array>} 金句列表
+   * @returns {Promise<Object>} { goldenQuotes: Array, usage: Object }
    */
   async analyze(messages, stats = null) {
     if (!messages || messages.length === 0) {
       logger.warn('[GoldenQuoteAnalyzer] 消息列表为空')
-      return []
+      return { goldenQuotes: [], usage: null }
     }
 
     // 过滤不适合作为金句的消息
@@ -55,7 +55,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
 
     if (filteredMessages.length === 0) {
       logger.warn('[GoldenQuoteAnalyzer] 过滤后无可用消息')
-      return []
+      return { goldenQuotes: [], usage: null }
     }
 
     logger.info(`[GoldenQuoteAnalyzer] 过滤后剩余 ${filteredMessages.length} 条消息`)
@@ -75,7 +75,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
 
     if (!result || !result.content) {
       logger.error('[GoldenQuoteAnalyzer] AI 调用失败')
-      return []
+      return { goldenQuotes: [], usage: null }
     }
 
     // 解析 JSON 响应
@@ -83,7 +83,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
 
     if (!Array.isArray(quotes)) {
       logger.error('[GoldenQuoteAnalyzer] 返回格式错误,期望数组')
-      return []
+      return { goldenQuotes: [], usage: result.usage || null }
     }
 
     // 验证和清理数据
@@ -98,7 +98,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
 
     logger.info(`[GoldenQuoteAnalyzer] 提取到 ${validQuotes.length} 条金句`)
 
-    return validQuotes
+    return { goldenQuotes: validQuotes, usage: result.usage || null }
   }
 
   /**

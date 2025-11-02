@@ -16,12 +16,12 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
    * 执行用户称号分析
    * @param {Array} messages - 消息列表
    * @param {Object} stats - 统计信息 (必需)
-   * @returns {Promise<Array>} 用户称号列表
+   * @returns {Promise<Object>} { userTitles: Array, usage: Object }
    */
   async analyze(messages, stats) {
     if (!stats || !stats.users || stats.users.length === 0) {
       logger.warn('[UserTitleAnalyzer] 无用户统计信息')
-      return []
+      return { userTitles: [], usage: null }
     }
 
     // 过滤消息数太少的用户
@@ -31,7 +31,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
 
     if (activeUsers.length === 0) {
       logger.warn('[UserTitleAnalyzer] 无活跃用户')
-      return []
+      return { userTitles: [], usage: null }
     }
 
     logger.info(`[UserTitleAnalyzer] 分析 ${activeUsers.length} 位活跃用户`)
@@ -47,7 +47,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
 
     if (!result || !result.content) {
       logger.error('[UserTitleAnalyzer] AI 调用失败')
-      return []
+      return { userTitles: [], usage: null }
     }
 
     // 解析 JSON 响应
@@ -55,7 +55,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
 
     if (!Array.isArray(titles)) {
       logger.error('[UserTitleAnalyzer] 返回格式错误,期望数组')
-      return []
+      return { userTitles: [], usage: result.usage || null }
     }
 
     // 验证和清理数据
@@ -71,7 +71,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
 
     logger.info(`[UserTitleAnalyzer] 生成 ${validTitles.length} 个用户称号`)
 
-    return validTitles
+    return { userTitles: validTitles, usage: result.usage || null }
   }
 
   /**

@@ -15,12 +15,12 @@ export default class TopicAnalyzer extends BaseAnalyzer {
    * 执行话题分析
    * @param {Array} messages - 消息列表
    * @param {Object} stats - 统计信息 (可选)
-   * @returns {Promise<Array>} 话题列表
+   * @returns {Promise<Object>} { topics: Array, usage: Object }
    */
   async analyze(messages, stats = null) {
     if (!messages || messages.length === 0) {
       logger.warn('[TopicAnalyzer] 消息列表为空')
-      return []
+      return { topics: [], usage: null }
     }
 
     // 格式化消息
@@ -38,7 +38,7 @@ export default class TopicAnalyzer extends BaseAnalyzer {
 
     if (!result || !result.content) {
       logger.error('[TopicAnalyzer] AI 调用失败')
-      return []
+      return { topics: [], usage: null }
     }
 
     // 解析 JSON 响应
@@ -46,7 +46,7 @@ export default class TopicAnalyzer extends BaseAnalyzer {
 
     if (!Array.isArray(topics)) {
       logger.error('[TopicAnalyzer] 返回格式错误,期望数组')
-      return []
+      return { topics: [], usage: result.usage || null }
     }
 
     // 验证和清理数据
@@ -63,7 +63,7 @@ export default class TopicAnalyzer extends BaseAnalyzer {
 
     logger.info(`[TopicAnalyzer] 提取到 ${validTopics.length} 个话题`)
 
-    return validTopics
+    return { topics: validTopics, usage: result.usage || null }
   }
 
   /**

@@ -93,8 +93,12 @@ export default class MessageCollector {
           images.push(imgUrl)
           logger.debug(`[群聊助手] 收集图片: ${imgUrl}`)
         }
-      } else if (this.collectFaces) {
-        // 收集各种类型的表情
+      } else if (msg.type === 'reply') {
+        hasReply = true
+      }
+
+      // 表情收集独立判断（不使用 else if）
+      if (this.collectFaces) {
         if (msg.type === 'face') {
           faces.face.push(msg.id)
         } else if (msg.type === 'mface') {
@@ -108,8 +112,6 @@ export default class MessageCollector {
         } else if (msg.type === 'sface') {
           faces.sface.push(msg.id)
         }
-      } else if (msg.type === 'reply') {
-        hasReply = true
       }
     }
 
