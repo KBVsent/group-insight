@@ -113,7 +113,7 @@ groupManager:
     enabled: true
 
     # 是否收集图片
-    collectImages: false
+    collectImages: true
 
     # 是否收集表情（必须开启才能统计表情数量）
     collectFaces: true

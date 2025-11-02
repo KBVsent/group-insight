@@ -98,7 +98,12 @@ export default class MessageCollector {
     }
 
     // 保存消息
-    if (message.text) {
+    // 只要有文本、表情或图片，就保存消息
+    const hasContent = message.text ||
+                      message.faces.total > 0 ||
+                      message.images.length > 0
+
+    if (hasContent) {
       await this.saveMessage(e, message)
     }
 
@@ -160,29 +165,28 @@ export default class MessageCollector {
       } else if (msg.type === 'reply') {
         hasReply = true
       } else if (msg.type === 'face') {
-        // QQ 原生表情
+        // QQ 原生表情（包括小表情和动画表情）
         if (this.collectFaces) {
-          // 尝试多种方式提取 face id
-          let faceId = null
-
-          // 方式1: 直接从 msg.id 获取
-          if (msg.id) {
-            faceId = msg.id
-          }
-          // 方式2: 从 raw 字符串解析
-          else if (msg.raw && typeof msg.raw === 'string') {
-            const faceMatch = msg.raw.match(/\[CQ:face,id=(\d+)/i)
-            if (faceMatch) faceId = faceMatch[1]
-          }
-          // 方式3: 从 raw 对象获取
-          else if (msg.raw && typeof msg.raw === 'object' && msg.raw.id) {
-            faceId = msg.raw.id
-          }
+          // 提取 face id（直接从 msg.id 获取）
+          const faceId = msg.id ? String(msg.id) : null
 
           if (faceId) {
-            faces.face.push(String(faceId))
-            faces.total++
-            logger.debug(`[群聊助手] 收集 QQ 表情: face ${faceId}`)
+            // 判断是小表情还是动画表情（通过 raw.faceType）
+            const faceType = msg.raw?.faceType
+
+            if (faceType === 3) {
+              // faceType=3 表示动画表情（如"敲敲"）
+              // 注意：这里我们仍然将其记录为 face，因为它没有可用的图片 URL
+              // 如果需要区分，可以单独统计
+              faces.face.push(faceId)
+              faces.total++
+              logger.debug(`[群聊助手] 收集 QQ 动画表情: face ${faceId} (${msg.raw?.faceText || ''})`)
+            } else {
+              // faceType=2 或其他，普通小表情
+              faces.face.push(faceId)
+              faces.total++
+              logger.debug(`[群聊助手] 收集 QQ 小表情: face ${faceId} (${msg.raw?.faceText || ''})`)
+            }
           } else {
             // 无法提取，输出调试信息
             logger.debug(`[群聊助手] 无法提取 face id，消息段结构: ${JSON.stringify(msg).substring(0, 200)}`)
@@ -239,14 +243,17 @@ export default class MessageCollector {
     const msgDate = new Date(e.time * 1000)
     const hour = msgDate.getHours()
 
+    // 如果没有文本但有表情，使用占位符（避免空消息导致统计异常）
+    const messageText = message.text || '[表情]'
+
     const messageData = {
       user_id: e.user_id,
       nickname: e.sender.nickname || e.nickname,
-      message: message.text,
+      message: messageText,
       time: e.time,
       timestamp: Date.now(),
       hour,  // 消息小时 (0-23)
-      length: message.text.length,  // 消息长度
+      length: messageText.length,  // 消息长度
       hasReply: message.hasReply  // 是否是回复消息
     }
 
