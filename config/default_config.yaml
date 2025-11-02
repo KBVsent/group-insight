@@ -126,15 +126,18 @@ groupManager:
     # 是否启用定时总结
     enabled: false
 
-    # Cron 表达式（默认每小时整点）
-    cron: '0 * * * *'
-
     # 白名单群列表（仅这些群会启用定时总结，为空则不启用）
     # 示例: ['123456789', '987654321']
     whitelist: []
 
     # 最小消息数阈值（消息少于此数量时跳过总结）
     minMessages: 99
+
+    # 并发数（同时处理的群数量）
+    concurrency: 3
+
+    # 注意：定时任务固定为每小时整点执行 (cron: '0 * * * *')
+    # 如需修改执行时间，请直接编辑 index.js 中的 this.task.cron
 
   # 总结功能配置
   summary:
