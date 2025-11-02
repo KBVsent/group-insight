@@ -24,6 +24,9 @@ export default class MessageCollector {
     this.scheduleConfig = config.schedule || {}
     this.whitelist = this.scheduleConfig.whitelist || []
 
+    // 防止重复注册监听器
+    this.isCollecting = false
+
     logger.info(`[群聊助手] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}`)
     if (this.whitelist.length > 0) {
       logger.info(`[群聊助手] 定时总结白名单: ${this.whitelist.length} 个群`)
@@ -34,6 +37,12 @@ export default class MessageCollector {
    * 开始监听群消息
    */
   startCollecting() {
+    // 避免重复注册监听器
+    if (this.isCollecting) {
+      logger.warn('[群聊助手] 消息收集器已经在运行，跳过重复注册')
+      return
+    }
+
     Bot.on('message.group', async (e) => {
       try {
         await this.handleMessage(e)
@@ -42,6 +51,7 @@ export default class MessageCollector {
       }
     })
 
+    this.isCollecting = true
     logger.info('[群聊助手] 消息收集器已启动')
   }
 
@@ -127,15 +137,34 @@ export default class MessageCollector {
         }
       } else if (msg.type === 'reply') {
         hasReply = true
-      }
+      } else if (msg.type === 'face') {
+        // QQ 原生表情
+        if (this.collectFaces) {
+          // 尝试多种方式提取 face id
+          let faceId = null
 
-      // 尝试从 raw 字段解析 CQ 码中的 face
-      if (this.collectFaces && msg.raw && typeof msg.raw === 'string') {
-        const faceMatch = msg.raw.match(/\[CQ:face,id=(\d+)/i)
-        if (faceMatch) {
-          faces.face.push(faceMatch[1])
-          faces.total++
-          logger.debug(`[群聊助手] 从 raw 解析到普通表情: face ${faceMatch[1]}`)
+          // 方式1: 直接从 msg.id 获取
+          if (msg.id) {
+            faceId = msg.id
+          }
+          // 方式2: 从 raw 字符串解析
+          else if (msg.raw && typeof msg.raw === 'string') {
+            const faceMatch = msg.raw.match(/\[CQ:face,id=(\d+)/i)
+            if (faceMatch) faceId = faceMatch[1]
+          }
+          // 方式3: 从 raw 对象获取
+          else if (msg.raw && typeof msg.raw === 'object' && msg.raw.id) {
+            faceId = msg.raw.id
+          }
+
+          if (faceId) {
+            faces.face.push(String(faceId))
+            faces.total++
+            logger.debug(`[群聊助手] 收集 QQ 表情: face ${faceId}`)
+          } else {
+            // 无法提取，输出调试信息
+            logger.debug(`[群聊助手] 无法提取 face id，消息段结构: ${JSON.stringify(msg).substring(0, 200)}`)
+          }
         }
       }
 
