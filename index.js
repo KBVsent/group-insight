@@ -10,7 +10,6 @@ import moment from 'moment'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
-import { marked } from 'marked'
 import puppeteer from '../../lib/puppeteer/puppeteer.js'
 import chokidar from 'chokidar'
 
@@ -18,7 +17,6 @@ import chokidar from 'chokidar'
 import MessageCollector from './services/messageCollector.js'
 import WordCloudGenerator from './services/wordCloudGenerator.js'
 import AIService from './services/aiService.js'
-import SummaryService from './services/summaryService.js'
 import StatisticsService from './services/StatisticsService.js'
 import ActivityVisualizer from './services/ActivityVisualizer.js'
 
@@ -66,7 +64,6 @@ let globalConfig = null
 let messageCollector = null
 let wordCloudGenerator = null
 let aiService = null
-let summaryService = null
 let statisticsService = null
 let activityVisualizer = null
 let topicAnalyzer = null
@@ -93,19 +90,14 @@ export class GroupManager extends plugin {
           permission: 'all'
         },
         {
-          reg: '^#(群聊)?总结\\s*(今天|昨天|前天|当天|三天|七天)?$',
-          fnc: 'querySummary',
+          reg: '^#群聊报告\\s*(今天|昨天|前天|\\d{4}-\\d{2}-\\d{2})?$',
+          fnc: 'generateReport',
           permission: 'all'
         },
         {
-          reg: '^#强制(群聊)?总结$',
-          fnc: 'forceGenerateSummary',
+          reg: '^#强制群聊报告$',
+          fnc: 'forceGenerateReport',
           permission: 'master'
-        },
-        {
-          reg: '^#群聊报告\\s*(当天|三天|七天)?$',
-          fnc: 'generateEnhancedReport',
-          permission: 'all'
         },
         {
           reg: '^#?清除(艾特|at)数据$',
@@ -122,9 +114,9 @@ export class GroupManager extends plugin {
 
     // 在 super() 之后设置定时任务
     this.task = {
-      name: '每小时群聊总结',
+      name: '每小时群聊报告',
       cron: '0 * * * *',  // 每小时整点执行
-      fnc: () => this.scheduledSummary(),  // 使用箭头函数
+      fnc: () => this.scheduledReport(),  // 使用箭头函数
       log: true
     }
   }
@@ -147,10 +139,6 @@ export class GroupManager extends plugin {
 
     // 初始化 AI 服务
     aiService = new AIService(globalConfig.ai || {})
-
-    // 初始化总结服务
-    summaryService = new SummaryService(globalConfig)
-    summaryService.init(aiService, messageCollector)
 
     // 初始化统计服务
     const statsConfig = {
@@ -247,10 +235,6 @@ export class GroupManager extends plugin {
 
           // 重新初始化 AI 服务
           aiService = new AIService(globalConfig.ai || {})
-
-          // 重新初始化总结服务
-          summaryService = new SummaryService(globalConfig)
-          summaryService.init(aiService, messageCollector)
 
           // 重新初始化统计和分析服务
           const statsConfig = {
@@ -479,11 +463,11 @@ export class GroupManager extends plugin {
   }
 
   /**
-   * 定时任务：每小时生成群聊总结（带并发控制）
+   * 定时任务：每小时生成群聊报告（带并发控制）
    */
-  async scheduledSummary() {
-    if (!summaryService || !messageCollector) {
-      logger.warn('[群聊助手] 定时总结功能未就绪')
+  async scheduledReport() {
+    if (!messageCollector) {
+      logger.warn('[群聊助手] 定时报告功能未就绪')
       return
     }
 
@@ -495,22 +479,22 @@ export class GroupManager extends plugin {
 
     // 检查是否启用
     if (!enabled || whitelist.length === 0) {
-      logger.debug('[群聊助手] 定时总结未启用或白名单为空，跳过')
+      logger.debug('[群聊助手] 定时报告未启用或白名单为空，跳过')
       return
     }
 
-    logger.mark(`[群聊助手] 开始执行定时总结任务 (白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
+    logger.mark(`[群聊助手] 开始执行定时报告任务 (白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
 
     // 使用并发限制处理白名单群
     const results = await this.runWithConcurrency(
       whitelist,
       async (groupId) => {
         try {
-          // 先检查消息数量
+          // 获取今天的消息
           const messages = await messageCollector.getMessages(groupId, 1)
 
           if (messages.length < minMessages) {
-            logger.debug(`[群聊助手] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过总结`)
+            logger.debug(`[群聊助手] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
             return { groupId, status: 'skipped', reason: 'insufficient_messages' }
           }
 
@@ -527,19 +511,30 @@ export class GroupManager extends plugin {
             logger.debug(`[群聊助手] 获取群 ${groupId} 名称失败，使用默认名称`)
           }
 
-          // 生成总结
-          logger.info(`[群聊助手] 正在为群 ${groupId} (${groupName}) 生成总结 (消息数: ${messages.length})`)
-          const result = await summaryService.generateDailySummary(groupId, groupName, false)
+          // 执行分析
+          logger.info(`[群聊助手] 正在为群 ${groupId} (${groupName}) 生成报告 (消息数: ${messages.length})`)
+          const analysisResults = await this.performAnalysis(messages, 1)
 
-          if (result.success) {
-            logger.mark(`[群聊助手] 群 ${groupId} 总结生成成功 (${result.messageCount} 条消息)`)
-            return { groupId, status: 'success', messageCount: result.messageCount }
-          } else {
-            logger.warn(`[群聊助手] 群 ${groupId} 总结生成失败: ${result.error}`)
-            return { groupId, status: 'failed', error: result.error }
+          if (!analysisResults) {
+            logger.warn(`[群聊助手] 群 ${groupId} 报告生成失败：分析失败`)
+            return { groupId, status: 'failed', error: 'analysis_failed' }
           }
+
+          // 保存报告到 Redis
+          const today = moment().format('YYYY-MM-DD')
+          await messageCollector.redisHelper.saveReport(groupId, today, {
+            stats: analysisResults.stats,
+            topics: analysisResults.topics,
+            goldenQuotes: analysisResults.goldenQuotes,
+            userTitles: analysisResults.userTitles,
+            messageCount: messages.length,
+            tokenUsage: analysisResults.tokenUsage
+          })
+
+          logger.mark(`[群聊助手] 群 ${groupId} 报告生成成功 (${messages.length} 条消息)`)
+          return { groupId, status: 'success', messageCount: messages.length }
         } catch (err) {
-          logger.error(`[群聊助手] 群 ${groupId} 定时总结异常: ${err}`)
+          logger.error(`[群聊助手] 群 ${groupId} 定时报告异常: ${err}`)
           return { groupId, status: 'error', error: err.message }
         }
       },
@@ -555,7 +550,7 @@ export class GroupManager extends plugin {
       error: results.filter(r => r.status === 'error').length
     }
 
-    logger.mark(`[群聊助手] 定时总结任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
+    logger.mark(`[群聊助手] 定时报告任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
   }
 
   /**
@@ -586,171 +581,60 @@ export class GroupManager extends plugin {
     return Promise.all(results)
   }
 
+
+
   /**
-   * 查询群聊总结（查询已有总结，不触发新生成）
+   * 查询群聊报告
+   * 支持查询今天、昨天、前天或指定日期的报告
    */
-  async querySummary(e) {
+  async generateReport(e) {
     if (!e.isGroup) {
       await e.reply('此功能仅支持群聊使用', true)
       return false
     }
 
-    if (!summaryService) {
-      await e.reply('总结功能未就绪', true)
+    if (!messageCollector) {
+      await e.reply('报告功能未就绪', true)
       return false
     }
 
     try {
       // 解析查询参数
-      const match = e.msg.match(/(今天|昨天|前天|当天|三天|七天)/)
-      let queryType = '今天'
-      let days = 1
+      const match = e.msg.match(/(今天|昨天|前天|(\d{4}-\d{2}-\d{2}))/)
+      let queryDate = moment().format('YYYY-MM-DD')  // 默认今天
+      let dateLabel = '今天'
 
       if (match) {
-        queryType = match[1]
-        if (queryType === '三天') days = 3
-        else if (queryType === '七天') days = 7
-        else if (queryType === '当天') queryType = '今天'
-      }
-
-      // 获取群名
-      let groupName = '未知群聊'
-      try {
-        const groupInfo = await e.group.getInfo?.()
-        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-      } catch (err) {
-        groupName = `群${e.group_id}`
-      }
-
-      // 查询总结
-      if (days === 1) {
-        // 查询单日总结
-        let date = moment().format('YYYY-MM-DD')
-        if (queryType === '昨天') {
-          date = moment().subtract(1, 'days').format('YYYY-MM-DD')
-        } else if (queryType === '前天') {
-          date = moment().subtract(2, 'days').format('YYYY-MM-DD')
-        }
-
-        const summary = await summaryService.getSummary(e.group_id, date)
-
-        if (!summary) {
-          // 尝试获取最新的总结
-          const latestSummary = await summaryService.getLatestSummary(e.group_id)
-          if (latestSummary) {
-            const dateLabel = moment(latestSummary.date).format('YYYY年MM月DD日')
-            await e.reply(`${queryType}还没有总结，这是最近一次的总结 (${dateLabel})：`, true)
-            await this.sendSummaryResult(e, latestSummary, groupName)
+        if (match[1] === '昨天') {
+          queryDate = moment().subtract(1, 'days').format('YYYY-MM-DD')
+          dateLabel = '昨天'
+        } else if (match[1] === '前天') {
+          queryDate = moment().subtract(2, 'days').format('YYYY-MM-DD')
+          dateLabel = '前天'
+        } else if (match[2]) {
+          // 日期格式验证
+          const date = moment(match[2], 'YYYY-MM-DD', true)
+          if (date.isValid()) {
+            queryDate = date.format('YYYY-MM-DD')
+            dateLabel = moment(queryDate).format('YYYY年MM月DD日')
           } else {
-            await e.reply(`${queryType}还没有生成总结，请稍后再试`, true)
+            await e.reply('日期格式错误，请使用：YYYY-MM-DD（如 2024-11-01）', true)
+            return false
           }
-          return false
+        } else if (match[1] === '今天') {
+          dateLabel = '今天'
         }
-
-        await this.sendSummaryResult(e, summary, groupName)
-      } else {
-        // 查询多日总结
-        const summaries = await summaryService.getMultipleDaySummaries(e.group_id, days)
-
-        if (summaries.length === 0) {
-          await e.reply(`没有找到最近${days}天的总结记录`, true)
-          return false
-        }
-
-        // 渲染多日总结
-        await this.sendMultipleDaySummaries(e, summaries, groupName, days)
       }
 
-      return true
-    } catch (err) {
-      logger.error(`[群聊助手] 查询总结错误: ${err}`)
-      await e.reply(`查询总结失败: ${err.message}`, true)
-      return false
-    }
-  }
+      // 从 Redis 获取指定日期的报告
+      const report = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
 
-  /**
-   * 强制生成群聊总结（超级用户专用，会覆盖已有总结）
-   */
-  async forceGenerateSummary(e) {
-    if (!e.isGroup) {
-      await e.reply('此功能仅支持群聊使用', true)
-      return false
-    }
-
-    if (!summaryService) {
-      await e.reply('总结功能未就绪', true)
-      return false
-    }
-
-    await e.reply('正在强制生成群聊总结，请稍候...')
-
-    try {
-      // 获取群名
-      let groupName = '未知群聊'
-      try {
-        const groupInfo = await e.group.getInfo?.()
-        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-      } catch (err) {
-        groupName = `群${e.group_id}`
-      }
-
-      // 强制生成总结
-      const result = await summaryService.generateDailySummary(e.group_id, groupName, true)
-
-      if (!result.success) {
-        await e.reply(`强制生成总结失败: ${result.error}`, true)
+      if (!report) {
+        await e.reply(`${dateLabel}还没有生成报告`, true)
         return false
       }
 
-      logger.info(`[群聊助手] 超级用户 ${e.user_id} 强制生成了群 ${e.group_id} 的总结`)
-
-      // 发送总结结果
-      await this.sendSummaryResult(e, {
-        content: result.summary,
-        messageCount: result.messageCount,
-        lastUpdateHour: result.hour,
-        date: result.date,
-        provider: result.provider,
-        model: result.model
-      }, groupName)
-
-      return true
-    } catch (err) {
-      logger.error(`[群聊助手] 强制生成总结错误: ${err}`)
-      await e.reply(`强制生成总结失败: ${err.message}`, true)
-      return false
-    }
-  }
-
-  /**
-   * 生成增强分析报告（新功能）
-   * 支持当天、三天、七天
-   */
-  async generateEnhancedReport(e) {
-    if (!e.isGroup) {
-      await e.reply('此功能仅支持群聊使用', true)
-      return false
-    }
-
-    if (!messageCollector || !aiService) {
-      await e.reply('增强分析功能未就绪', true)
-      return false
-    }
-
-    try {
-      // 解析天数参数
-      const match = e.msg.match(/(当天|三天|七天)/)
-      let days = 1
-      let timeLabel = '当天'
-
-      if (match) {
-        timeLabel = match[1]
-        if (timeLabel === '三天') days = 3
-        else if (timeLabel === '七天') days = 7
-      }
-
-      await e.reply(`正在生成${timeLabel}的增强分析报告，请稍候...`)
+      logger.info(`[群聊助手] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告`)
 
       // 获取群名
       let groupName = '未知群聊'
@@ -761,64 +645,43 @@ export class GroupManager extends plugin {
         groupName = `群${e.group_id}`
       }
 
-      // 获取消息
-      const messages = await messageCollector.getMessages(e.group_id, days)
-
-      if (messages.length === 0) {
-        await e.reply(`${timeLabel}还没有消息，无法生成分析报告`, true)
-        return false
-      }
-
-      logger.info(`[群聊助手] 用户 ${e.user_id} 请求生成群 ${e.group_id} 的${timeLabel}增强分析 (消息数: ${messages.length})`)
-
-      // 执行增强分析
-      const analysisResults = await this.performEnhancedAnalysis(messages, days)
-
-      if (!analysisResults) {
-        await e.reply('分析失败，请查看日志', true)
-        return false
-      }
-
-      // 渲染增强报告
-      const img = await this.renderEnhancedSummary(analysisResults, {
+      // 渲染报告
+      const img = await this.renderReport(report, {
         groupName,
-        provider: aiService.provider,
-        model: aiService.model,
-        tokenUsage: analysisResults.tokenUsage || null
+        provider: aiService?.provider || 'AI',
+        model: aiService?.model || '',
+        tokenUsage: report.tokenUsage,
+        date: queryDate
       })
 
       if (img) {
         await e.reply(img)
       } else {
         // 渲染失败，发送文本总结
-        let textSummary = `📊 ${timeLabel}群聊分析报告\n\n`
-        textSummary += `消息总数: ${analysisResults.stats.basic.totalMessages}\n`
-        textSummary += `参与人数: ${analysisResults.stats.basic.totalUsers}\n`
-        textSummary += `日期范围: ${analysisResults.stats.basic.dateRange.start} ~ ${analysisResults.stats.basic.dateRange.end}\n\n`
+        let textSummary = `📊 ${dateLabel}群聊报告\n\n`
+        textSummary += `消息总数: ${report.stats?.basic?.totalMessages || report.messageCount}\n`
+        textSummary += `参与人数: ${report.stats?.basic?.totalUsers || 0}\n`
+        textSummary += `日期: ${queryDate}\n\n`
 
-        if (analysisResults.skipped) {
-          textSummary += `⚠️ ${analysisResults.reason}\n\n`
-        }
-
-        if (analysisResults.topics.length > 0) {
+        if (report.topics && report.topics.length > 0) {
           textSummary += `💬 热门话题:\n`
-          analysisResults.topics.forEach((topic, i) => {
+          report.topics.forEach((topic, i) => {
             textSummary += `${i + 1}. ${topic.topic}\n`
           })
           textSummary += `\n`
         }
 
-        if (analysisResults.userTitles.length > 0) {
+        if (report.userTitles && report.userTitles.length > 0) {
           textSummary += `🏆 群友称号:\n`
-          analysisResults.userTitles.forEach((title) => {
+          report.userTitles.forEach((title) => {
             textSummary += `• ${title.user} - ${title.title} (${title.mbti})\n`
           })
           textSummary += `\n`
         }
 
-        if (analysisResults.goldenQuotes.length > 0) {
+        if (report.goldenQuotes && report.goldenQuotes.length > 0) {
           textSummary += `💎 群圣经:\n`
-          analysisResults.goldenQuotes.forEach((quote, i) => {
+          report.goldenQuotes.forEach((quote, i) => {
             textSummary += `${i + 1}. "${quote.quote}" —— ${quote.sender}\n`
           })
         }
@@ -828,134 +691,100 @@ export class GroupManager extends plugin {
 
       return true
     } catch (err) {
-      logger.error(`[群聊助手] 生成增强分析报告错误: ${err}`)
-      await e.reply(`生成分析失败: ${err.message}`, true)
+      logger.error(`[群聊助手] 查询报告错误: ${err}`)
+      await e.reply(`查询报告失败: ${err.message}`, true)
       return false
     }
   }
 
   /**
-   * 发送单日总结结果
+   * 强制生成群聊报告（主人专用）
+   * 立即生成今天的报告，覆盖已有报告
    */
-  async sendSummaryResult(e, summary, groupName) {
+  async forceGenerateReport(e) {
+    if (!e.isGroup) {
+      await e.reply('此功能仅支持群聊使用', true)
+      return false
+    }
+
+    if (!messageCollector) {
+      await e.reply('报告功能未就绪', true)
+      return false
+    }
+
+    await e.reply('正在强制生成今天的群聊报告，请稍候...')
+
     try {
-      // 渲染总结
-      const img = await this.renderSummary({
-        summary: summary.content,
-        provider: summary.provider,
-        model: summary.model
-      }, {
+      // 获取今天的消息
+      const messages = await messageCollector.getMessages(e.group_id, 1)
+
+      if (messages.length === 0) {
+        await e.reply('今天还没有消息，无法生成报告', true)
+        return false
+      }
+
+      // 获取群名
+      let groupName = '未知群聊'
+      try {
+        const groupInfo = await e.group.getInfo?.()
+        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+      } catch (err) {
+        groupName = `群${e.group_id}`
+      }
+
+      logger.info(`[群聊助手] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
+
+      // 执行分析
+      const analysisResults = await this.performAnalysis(messages, 1)
+
+      if (!analysisResults) {
+        await e.reply('分析失败，请查看日志', true)
+        return false
+      }
+
+      // 保存报告到 Redis（覆盖已有报告）
+      const today = moment().format('YYYY-MM-DD')
+      await messageCollector.redisHelper.saveReport(e.group_id, today, {
+        stats: analysisResults.stats,
+        topics: analysisResults.topics,
+        goldenQuotes: analysisResults.goldenQuotes,
+        userTitles: analysisResults.userTitles,
+        messageCount: messages.length,
+        tokenUsage: analysisResults.tokenUsage
+      })
+
+      logger.mark(`[群聊助手] 主人强制生成报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+
+      // 渲染并发送报告
+      const img = await this.renderReport(analysisResults, {
         groupName,
-        days: 1,
-        messageCount: summary.messageCount,
-        date: summary.date,
-        hour: summary.lastUpdateHour
+        provider: aiService?.provider || 'AI',
+        model: aiService?.model || '',
+        tokenUsage: analysisResults.tokenUsage,
+        date: today
       })
 
       if (img) {
         await e.reply(img)
       } else {
-        // 渲染失败，直接发送文本
-        await e.reply(summary.content)
+        await e.reply('报告已生成并保存，但渲染失败', true)
       }
+
+      return true
     } catch (err) {
-      logger.error(`[群聊助手] 发送总结失败: ${err}`)
-      await e.reply('发送总结失败，请查看日志')
+      logger.error(`[群聊助手] 强制生成报告错误: ${err}`)
+      await e.reply(`生成报告失败: ${err.message}`, true)
+      return false
     }
   }
 
   /**
-   * 发送多日总结
-   */
-  async sendMultipleDaySummaries(e, summaries, groupName, days) {
-    try {
-      // 为每一天生成单独的图片
-      const messages = []
-
-      for (const summary of summaries) {
-        const dateLabel = moment(summary.date).format('YYYY年MM月DD日')
-        messages.push(`\n【${dateLabel}】`)
-
-        const img = await this.renderSummary({
-          summary: summary.content,
-          provider: summary.provider,
-          model: summary.model
-        }, {
-          groupName,
-          days: 1,
-          messageCount: summary.messageCount,
-          date: summary.date,
-          hour: summary.lastUpdateHour
-        })
-
-        if (img) {
-          messages.push(img)
-        } else {
-          messages.push(summary.content)
-        }
-      }
-
-      // 分批发送
-      for (const msg of messages) {
-        await e.reply(msg)
-        await Bot.sleep(500) // 避免发送过快
-      }
-    } catch (err) {
-      logger.error(`[群聊助手] 发送多日总结失败: ${err}`)
-      await e.reply('发送总结失败，请查看日志')
-    }
-  }
-
-  /**
-   * 渲染总结结果
-   */
-  async renderSummary(result, options) {
-    try {
-      // 将 Markdown 转换为 HTML
-      const summaryHtml = marked.parse(result.summary)
-
-      // 格式化日期和时间
-      const date = options.date || moment().format('YYYY-MM-DD')
-      const hour = options.hour !== undefined ? options.hour : moment().hour()
-      const timeLabel = `${date} ${hour}:00`
-
-      // 获取渲染质量配置
-      const renderConfig = globalConfig.summary?.render || {}
-      const imgType = renderConfig.imgType || 'png'
-      const quality = renderConfig.quality || 100
-
-      const templateData = {
-        provider: result.provider === 'claude' ? 'Claude' : result.provider === 'openai' ? 'OpenAI' : result.provider,
-        groupName: options.groupName,
-        timeRange: `${date} (${hour}:00 更新)`,
-        messageCount: options.messageCount,
-        createTime: timeLabel,
-        summaryHtml,
-        pluResPath: join(__dirname, 'resources') + '/'
-      }
-
-      // 使用高质量渲染参数
-      const img = await puppeteer.screenshot('group-insight-summary', {
-        tplFile: join(__dirname, 'resources/summary/index.html'),
-        imgType,
-        quality,
-        ...templateData
-      })
-
-      return img
-    } catch (err) {
-      logger.error(`[群聊助手] 渲染总结失败: ${err}`)
-      return null
-    }
-  }
-
-  /**
-   * 执行增强分析
+   * 执行分析
    * @param {Array} messages - 消息列表
    * @param {number} days - 天数
    * @returns {Object} 分析结果
    */
-  async performEnhancedAnalysis(messages, days = 1) {
+  async performAnalysis(messages, days = 1) {
     try {
       logger.info(`[群聊助手] 开始增强分析 (消息数: ${messages.length})`)
 
@@ -1054,12 +883,12 @@ export class GroupManager extends plugin {
   }
 
   /**
-   * 渲染增强总结
+   * 渲染报告
    * @param {Object} analysisResults - 分析结果
    * @param {Object} options - 渲染选项
    * @returns {Buffer} 图片 Buffer
    */
-  async renderEnhancedSummary(analysisResults, options) {
+  async renderReport(analysisResults, options) {
     try {
       const { stats, topics, goldenQuotes, userTitles } = analysisResults
 
