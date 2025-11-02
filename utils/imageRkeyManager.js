@@ -6,7 +6,7 @@
 export default class ImageRkeyManager {
   constructor(redisPrefix = 'Yz:groupManager:rkey') {
     this.redisPrefix = redisPrefix
-    this.rkeyExpiry = 7 * 24 * 60 * 60 // 7天过期（保守估计）
+    this.rkeyExpiry = 2 * 60 * 60 // 2小时过期
   }
 
   /**
