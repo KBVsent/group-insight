@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>群聊分析报告</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     * {
       margin: 0;
@@ -69,6 +70,22 @@
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
+    .stat-card:nth-child(1) {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .stat-card:nth-child(2) {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+
+    .stat-card:nth-child(3) {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    .stat-card:nth-child(4) {
+      background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+
     .stat-label {
       font-size: 12px;
       opacity: 0.9;
@@ -84,9 +101,9 @@
     .activity-chart {
       margin: 20px 0;
       padding: 15px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
       border-radius: 12px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
     }
 
     .activity-chart-title {
@@ -220,17 +237,22 @@
 
     /* 话题卡片 */
     .topic-card {
-      background: #f8f9fa;
-      border-left: 4px solid #667eea;
+      background: linear-gradient(to right, #f8f9fa 0%, #ffffff 100%);
+      border-left: 4px solid transparent;
+      border-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%) 1;
       padding: 15px;
       margin-bottom: 15px;
       border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
 
     .topic-title {
       font-size: 16px;
       font-weight: bold;
-      color: #667eea;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       margin-bottom: 8px;
     }
 
@@ -277,8 +299,10 @@
     }
 
     .title-badge {
-      font-size: 14px;
+      font-size: 15px;
+      font-weight: 600;
       margin-bottom: 5px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
 
     .title-mbti {
@@ -291,19 +315,21 @@
     }
 
     .title-reason {
-      font-size: 11px;
+      font-size: 14px;
       opacity: 0.9;
-      line-height: 1.4;
+      line-height: 1.5;
     }
 
     /* 金句卡片 */
     .quote-card {
-      background: #fffbeb;
-      border-left: 4px solid #f59e0b;
+      background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+      border-left: 4px solid transparent;
+      border-image: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%) 1;
       padding: 15px;
       margin-bottom: 15px;
       border-radius: 8px;
       position: relative;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
     }
 
     .quote-card::before {
@@ -312,7 +338,10 @@
       top: 10px;
       left: 10px;
       font-size: 40px;
-      color: #fbbf24;
+      background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       opacity: 0.3;
       font-family: Georgia, serif;
     }
@@ -337,7 +366,10 @@
 
     .quote-sender {
       font-weight: bold;
-      color: #f59e0b;
+      background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     .quote-reason {
@@ -356,15 +388,52 @@
 
     /* 页脚 */
     .footer {
-      background: #f3f4f6;
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
       padding: 20px;
       text-align: center;
       color: #6b7280;
       font-size: 12px;
+      border-top: 2px solid transparent;
+      border-image: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%) 1;
     }
 
     .footer p {
       margin: 5px 0;
+    }
+
+    /* 图标样式 */
+    i.fas, i.far, i.fab {
+      margin-right: 6px;
+    }
+
+    .section-title i {
+      color: #667eea;
+    }
+
+    .stat-label i {
+      margin-right: 4px;
+      font-size: 14px;
+    }
+
+    .title-user i,
+    .title-badge i,
+    .title-mbti i {
+      margin-right: 4px;
+      font-size: 12px;
+    }
+
+    .topic-contributors i {
+      color: #667eea;
+    }
+
+    .quote-sender i {
+      margin-right: 4px;
+      font-size: 12px;
+    }
+
+    .footer i {
+      color: #667eea;
+      margin-right: 6px;
     }
 
     /* 移动端适配 */
@@ -412,37 +481,37 @@
   <div class="container">
     <!-- 头部 -->
     <div class="header">
-      <h1 class="title">🎯 群聊分析报告</h1>
-      <div class="subtitle">由 {{provider}} {{model}} 生成</div>
+      <h1 class="title"><i class="fas fa-chart-line"></i> 群聊分析报告</h1>
+      <div class="subtitle"><i class="fas fa-sparkles"></i> 由 Little AI[{{provider}}] 生成</div>
     </div>
 
     <div class="content">
       <!-- 基础统计 -->
       <div class="section">
-        <div class="section-title">📊 基础统计</div>
+        <div class="section-title"><i class="fas fa-chart-bar"></i> 基础统计</div>
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-label">消息总数</div>
+            <div class="stat-label"><i class="fas fa-comments"></i> 消息总数</div>
             <div class="stat-value">{{totalMessages}}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">参与人数</div>
+            <div class="stat-label"><i class="fas fa-users"></i> 参与人数</div>
             <div class="stat-value">{{totalUsers}}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">总字符数</div>
+            <div class="stat-label"><i class="fas fa-font"></i> 总字符数</div>
             <div class="stat-value">{{totalChars}}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">表情数量</div>
+            <div class="stat-label"><i class="fas fa-face-smile"></i> 表情数量</div>
             <div class="stat-value">{{totalEmojis}}</div>
           </div>
         </div>
         <div class="topic-card" style="background: #f0f9ff; border-left-color: #3b82f6;">
           <div class="topic-detail">
-            📅 分析时段: {{dateRange}}<br>
-            📈 最活跃时段: {{peakPeriod}}<br>
-            💬 平均消息长度: {{avgLength}} 字
+            <i class="fas fa-calendar-alt"></i> 分析时段: {{dateRange}}<br>
+            <i class="fas fa-chart-line"></i> 最活跃时段: {{peakPeriod}}<br>
+            <i class="fas fa-align-left"></i> 平均消息长度: {{avgLength}} 字
           </div>
         </div>
       </div>
@@ -457,13 +526,13 @@
       <!-- 热门话题 -->
       {{if topics && topics.length > 0}}
       <div class="section">
-        <div class="section-title">💬 热门话题</div>
+        <div class="section-title"><i class="fas fa-fire"></i> 热门话题</div>
         {{each topics topic index}}
         <div class="topic-card">
           <div class="topic-title">{{index + 1}}. {{topic.topic}}</div>
           {{if topic.contributors && topic.contributors.length > 0}}
           <div class="topic-contributors">
-            👥 主要参与者: {{topic.contributors.join('、')}}
+            <i class="fas fa-user-group"></i> 主要参与者: {{topic.contributors.join('、')}}
           </div>
           {{/if}}
           <div class="topic-detail">{{topic.detail}}</div>
@@ -475,13 +544,13 @@
       <!-- 群友称号 -->
       {{if userTitles && userTitles.length > 0}}
       <div class="section">
-        <div class="section-title">🏆 群友称号</div>
+        <div class="section-title"><i class="fas fa-trophy"></i> 群友称号</div>
         <div class="titles-grid">
           {{each userTitles item}}
           <div class="title-card">
-            <div class="title-user">{{item.user}}</div>
-            <div class="title-badge">「{{item.title}}」</div>
-            <div class="title-mbti">{{item.mbti}}</div>
+            <div class="title-user"><i class="fas fa-user"></i> {{item.user}}</div>
+            <div class="title-badge"><i class="fas fa-award"></i> {{item.title}}</div>
+            <div class="title-mbti"><i class="fas fa-brain"></i> {{item.mbti}}</div>
             <div class="title-reason">{{item.reason}}</div>
           </div>
           {{/each}}
@@ -492,12 +561,12 @@
       <!-- 群圣经 (金句) -->
       {{if goldenQuotes && goldenQuotes.length > 0}}
       <div class="section">
-        <div class="section-title">💎 群圣经</div>
+        <div class="section-title"><i class="fas fa-gem"></i> 群圣经</div>
         {{each goldenQuotes quote index}}
         <div class="quote-card">
           <div class="quote-text">{{quote.quote}}</div>
           <div class="quote-footer">
-            <div class="quote-sender">—— {{quote.sender}}</div>
+            <div class="quote-sender"><i class="fas fa-user-tag"></i> {{quote.sender}}</div>
             <div class="quote-reason">{{quote.reason}}</div>
           </div>
         </div>
@@ -508,7 +577,7 @@
       <!-- 传统总结 (如果有) -->
       {{if summaryHtml}}
       <div class="section">
-        <div class="section-title">📝 AI 总结</div>
+        <div class="section-title"><i class="fas fa-file-lines"></i> Little AI 总结</div>
         <div class="topic-card" style="background: #f0fdf4; border-left-color: #10b981;">
           <div class="topic-detail">
             {{@summaryHtml}}
@@ -520,11 +589,11 @@
 
     <!-- 页脚 -->
     <div class="footer">
-      <p>📅 报告生成时间: {{createTime}}</p>
+      <p><i class="fas fa-clock"></i> 报告生成时间: {{createTime}}</p>
       {{if tokenUsage}}
-      <p>🤖 Token 使用: Prompt {{tokenUsage.prompt}} + Completion {{tokenUsage.completion}} = Total {{tokenUsage.total}}</p>
+      <p><i class="fas fa-microchip"></i> Token 使用: Prompt {{tokenUsage.prompt}} + Completion {{tokenUsage.completion}} = Total {{tokenUsage.total}}</p>
       {{/if}}
-      <p>⚠️ 本报告由 AI 生成,仅供参考</p>
+      <p><i class="fas fa-circle-info"></i> 本报告根据Little AI心情生成,看一下就好</p>
     </div>
   </div>
 </body>
