@@ -12,6 +12,7 @@ import { dirname, join } from 'path'
 import fs from 'fs'
 import { marked } from 'marked'
 import puppeteer from '../../lib/puppeteer/puppeteer.js'
+import chokidar from 'chokidar'
 
 // 服务
 import MessageCollector from './services/messageCollector.js'
@@ -142,7 +143,62 @@ export class GroupManager extends plugin {
       logger.info('[群聊助手] 定时总结未启用（需配置白名单群）')
     }
 
+    // 监听配置文件变化（热重载）
+    this.watchConfig()
+
     logger.info('[群聊助手] 插件初始化完成')
+  }
+
+  /**
+   * 监听配置文件变化
+   */
+  watchConfig() {
+    const configPath = join(__dirname, 'config/config.yaml')
+
+    // 只监听用户配置文件（不监听默认配置文件）
+    if (fs.existsSync(configPath)) {
+      const watcher = chokidar.watch(configPath, {
+        persistent: true,
+        ignoreInitial: true
+      })
+
+      watcher.on('change', async () => {
+        logger.mark('[群聊助手] 检测到配置文件修改，正在重新加载...')
+
+        try {
+          // 重新加载配置
+          globalConfig = await loadConfig()
+
+          // 重新初始化服务
+          if (globalConfig.messageCollection?.enabled !== false) {
+            if (messageCollector) {
+              // 更新现有收集器的配置
+              messageCollector.config = globalConfig
+            } else {
+              // 如果之前未启用，现在创建
+              messageCollector = new MessageCollector(globalConfig)
+              messageCollector.startCollecting()
+            }
+          }
+
+          // 重新初始化词云生成器
+          wordCloudGenerator = new WordCloudGenerator(globalConfig.wordCloud || {})
+
+          // 重新初始化 AI 服务
+          aiService = new AIService(globalConfig.ai || {})
+
+          // 重新初始化总结服务
+          summaryService = new SummaryService(globalConfig)
+          summaryService.init(aiService, messageCollector)
+
+          logger.mark('[群聊助手] 配置文件重新加载完成')
+        } catch (err) {
+          logger.error(`[群聊助手] 配置文件重新加载失败: ${err}`)
+        }
+      })
+
+      logger.info('[群聊助手] 配置文件热重载已启用')
+    }
   }
 
   /**
