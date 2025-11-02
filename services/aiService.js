@@ -222,6 +222,74 @@ ${messagesText}
   }
 
   /**
+   * 通用聊天接口 (供分析器使用)
+   * @param {string} prompt - 提示词
+   * @param {number} maxTokens - 最大 Token 数
+   * @param {number} temperature - 温度参数
+   * @param {number} timeout - 超时时间 (秒)
+   * @returns {Promise<Object>} 返回 { content, usage }
+   */
+  async chat(prompt, maxTokens = 2000, temperature = 0.7, timeout = 100) {
+    if (!this.client) {
+      const initialized = await this.init()
+      if (!initialized) {
+        throw new Error('AI 服务未初始化')
+      }
+    }
+
+    try {
+      let content = ''
+      let usage = null
+
+      switch (this.provider) {
+        case 'claude': {
+          const response = await this.client.messages.create({
+            model: this.model,
+            max_tokens: maxTokens,
+            temperature,
+            messages: [{
+              role: 'user',
+              content: prompt
+            }]
+          })
+          content = response.content[0].text
+          usage = {
+            prompt_tokens: response.usage?.input_tokens || 0,
+            completion_tokens: response.usage?.output_tokens || 0,
+            total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
+          }
+          break
+        }
+        case 'openai': {
+          const response = await this.client.chat.completions.create({
+            model: this.model,
+            max_tokens: maxTokens,
+            temperature,
+            messages: [{
+              role: 'user',
+              content: prompt
+            }]
+          })
+          content = response.choices[0].message.content
+          usage = {
+            prompt_tokens: response.usage?.prompt_tokens || 0,
+            completion_tokens: response.usage?.completion_tokens || 0,
+            total_tokens: response.usage?.total_tokens || 0
+          }
+          break
+        }
+        default:
+          throw new Error(`不支持的 AI 提供商: ${this.provider}`)
+      }
+
+      return { content, usage }
+    } catch (err) {
+      logger.error(`[AIService] Chat 调用失败: ${err.message}`)
+      throw err
+    }
+  }
+
+  /**
    * 调用 Claude API
    */
   async callClaude(prompt) {

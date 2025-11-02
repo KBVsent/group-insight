@@ -882,9 +882,6 @@ export class GroupManager extends plugin {
         ? activityVisualizer.generateChart(stats.hourly)
         : ''
 
-      // 获取活跃度样式
-      const activityStyles = ActivityVisualizer.getStyles()
-
       // 格式化日期范围
       const dateRange = stats.basic.dateRange.start === stats.basic.dateRange.end
         ? stats.basic.dateRange.start
@@ -912,7 +909,6 @@ export class GroupManager extends plugin {
         // 活跃度图表
         enableActivityChart: globalConfig.analysis?.activity?.enabled !== false,
         activityChart,
-        activityStyles,
 
         // AI 分析结果
         topics,

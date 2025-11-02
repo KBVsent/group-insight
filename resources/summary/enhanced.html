@@ -80,8 +80,120 @@
       font-weight: bold;
     }
 
-    /* 活跃度图表样式 (由 ActivityVisualizer 提供) */
-    {{@activityStyles}}
+    /* 活跃度图表样式 */
+    .activity-chart {
+      margin: 20px 0;
+      padding: 15px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .activity-chart-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .peak-indicator {
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .activity-chart-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      height: 150px;
+      margin-bottom: 10px;
+      padding: 10px 5px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+    }
+
+    .activity-hour {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 1px;
+    }
+
+    .activity-bar-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .activity-bar {
+      width: 90%;
+      min-height: 2px;
+      border-radius: 4px 4px 0 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .activity-count {
+      font-size: 9px;
+      color: white;
+      font-weight: bold;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      padding: 2px 0;
+    }
+
+    .activity-hour.peak .activity-bar {
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.8);
+    }
+
+    .activity-label {
+      margin-top: 5px;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.9);
+      font-weight: 500;
+    }
+
+    .activity-legend {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .activity-empty {
+      text-align: center;
+      padding: 40px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+    }
 
     /* 章节 */
     .section {
