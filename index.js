@@ -314,6 +314,7 @@ export class GroupManager extends plugin {
     const scheduleConfig = globalConfig.schedule || {}
     const enabled = scheduleConfig.enabled !== false
     const whitelist = scheduleConfig.whitelist || []
+    const minMessages = scheduleConfig.minMessages || 99  // 最小消息数阈值，默认99条
 
     // 检查是否启用
     if (!enabled || whitelist.length === 0) {
@@ -326,6 +327,14 @@ export class GroupManager extends plugin {
     // 遍历白名单群
     for (const groupId of whitelist) {
       try {
+        // 先检查消息数量
+        const messages = await messageCollector.getMessages(groupId, 1)
+
+        if (messages.length < minMessages) {
+          logger.debug(`[群聊助手] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过总结`)
+          continue
+        }
+
         // 获取群名
         let groupName = `群${groupId}`
         try {
@@ -340,7 +349,7 @@ export class GroupManager extends plugin {
         }
 
         // 生成总结
-        logger.info(`[群聊助手] 正在为群 ${groupId} (${groupName}) 生成总结`)
+        logger.info(`[群聊助手] 正在为群 ${groupId} (${groupName}) 生成总结 (消息数: ${messages.length})`)
         const result = await summaryService.generateDailySummary(groupId, groupName, false)
 
         if (result.success) {
