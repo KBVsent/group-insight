@@ -111,15 +111,18 @@ export default class MessageCollector {
       } else if (msg.type === 'image') {
         // 判断是否是动画表情
         if (this.collectFaces && msg.summary && /动画表情|表情|sticker|emoji/i.test(msg.summary)) {
-          faces.mface.push(msg.file || msg.url)
-          faces.total++
-          logger.debug(`[群聊助手] 收集动画表情: ${msg.summary}`)
+          const mfaceUrl = msg.url || msg.file  // 优先使用 url（包含完整路径和 rkey）
+          if (mfaceUrl) {
+            faces.mface.push(mfaceUrl)
+            faces.total++
+            logger.debug(`[群聊助手] 收集动画表情: ${msg.summary}, URL: ${mfaceUrl.substring(0, 100)}`)
+          }
         } else if (this.collectImages) {
           // 普通图片
           const imgUrl = msg.url || msg.file
           if (imgUrl) {
             images.push(imgUrl)
-            logger.debug(`[群聊助手] 收集图片: ${imgUrl}`)
+            logger.debug(`[群聊助手] 收集图片: ${imgUrl.substring(0, 100)}`)
           }
         }
       } else if (msg.type === 'reply') {
