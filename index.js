@@ -103,6 +103,11 @@ export class GroupManager extends plugin {
           permission: 'master'
         },
         {
+          reg: '^#群聊报告\\s*(当天|三天|七天)?$',
+          fnc: 'generateEnhancedReport',
+          permission: 'all'
+        },
+        {
           reg: '^#?清除(艾特|at)数据$',
           fnc: 'clearAtRecords',
           permission: 'all'
@@ -583,7 +588,6 @@ export class GroupManager extends plugin {
 
   /**
    * 强制生成群聊总结（超级用户专用，会覆盖已有总结）
-   * 使用增强分析功能
    */
   async forceGenerateSummary(e) {
     if (!e.isGroup) {
@@ -591,12 +595,12 @@ export class GroupManager extends plugin {
       return false
     }
 
-    if (!messageCollector || !aiService) {
+    if (!summaryService) {
       await e.reply('总结功能未就绪', true)
       return false
     }
 
-    await e.reply('正在生成增强分析报告，请稍候...')
+    await e.reply('正在强制生成群聊总结，请稍候...')
 
     try {
       // 获取群名
@@ -608,18 +612,84 @@ export class GroupManager extends plugin {
         groupName = `群${e.group_id}`
       }
 
-      // 获取今天的消息
-      const messages = await messageCollector.getMessages(e.group_id, 1)
+      // 强制生成总结
+      const result = await summaryService.generateDailySummary(e.group_id, groupName, true)
 
-      if (messages.length === 0) {
-        await e.reply('今天还没有消息，无法生成分析报告', true)
+      if (!result.success) {
+        await e.reply(`强制生成总结失败: ${result.error}`, true)
         return false
       }
 
-      logger.info(`[群聊助手] 超级用户 ${e.user_id} 强制生成群 ${e.group_id} 的增强分析 (消息数: ${messages.length})`)
+      logger.info(`[群聊助手] 超级用户 ${e.user_id} 强制生成了群 ${e.group_id} 的总结`)
+
+      // 发送总结结果
+      await this.sendSummaryResult(e, {
+        content: result.summary,
+        messageCount: result.messageCount,
+        lastUpdateHour: result.hour,
+        date: result.date,
+        provider: result.provider,
+        model: result.model
+      }, groupName)
+
+      return true
+    } catch (err) {
+      logger.error(`[群聊助手] 强制生成总结错误: ${err}`)
+      await e.reply(`强制生成总结失败: ${err.message}`, true)
+      return false
+    }
+  }
+
+  /**
+   * 生成增强分析报告（新功能）
+   * 支持当天、三天、七天
+   */
+  async generateEnhancedReport(e) {
+    if (!e.isGroup) {
+      await e.reply('此功能仅支持群聊使用', true)
+      return false
+    }
+
+    if (!messageCollector || !aiService) {
+      await e.reply('增强分析功能未就绪', true)
+      return false
+    }
+
+    try {
+      // 解析天数参数
+      const match = e.msg.match(/(当天|三天|七天)/)
+      let days = 1
+      let timeLabel = '当天'
+
+      if (match) {
+        timeLabel = match[1]
+        if (timeLabel === '三天') days = 3
+        else if (timeLabel === '七天') days = 7
+      }
+
+      await e.reply(`正在生成${timeLabel}的增强分析报告，请稍候...`)
+
+      // 获取群名
+      let groupName = '未知群聊'
+      try {
+        const groupInfo = await e.group.getInfo?.()
+        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+      } catch (err) {
+        groupName = `群${e.group_id}`
+      }
+
+      // 获取消息
+      const messages = await messageCollector.getMessages(e.group_id, days)
+
+      if (messages.length === 0) {
+        await e.reply(`${timeLabel}还没有消息，无法生成分析报告`, true)
+        return false
+      }
+
+      logger.info(`[群聊助手] 用户 ${e.user_id} 请求生成群 ${e.group_id} 的${timeLabel}增强分析 (消息数: ${messages.length})`)
 
       // 执行增强分析
-      const analysisResults = await this.performEnhancedAnalysis(messages, 1)
+      const analysisResults = await this.performEnhancedAnalysis(messages, days)
 
       if (!analysisResults) {
         await e.reply('分析失败，请查看日志', true)
@@ -637,15 +707,35 @@ export class GroupManager extends plugin {
         await e.reply(img)
       } else {
         // 渲染失败，发送文本总结
-        let textSummary = `📊 群聊分析报告\n\n`
+        let textSummary = `📊 ${timeLabel}群聊分析报告\n\n`
         textSummary += `消息总数: ${analysisResults.stats.basic.totalMessages}\n`
         textSummary += `参与人数: ${analysisResults.stats.basic.totalUsers}\n`
         textSummary += `日期范围: ${analysisResults.stats.basic.dateRange.start} ~ ${analysisResults.stats.basic.dateRange.end}\n\n`
+
+        if (analysisResults.skipped) {
+          textSummary += `⚠️ ${analysisResults.reason}\n\n`
+        }
 
         if (analysisResults.topics.length > 0) {
           textSummary += `💬 热门话题:\n`
           analysisResults.topics.forEach((topic, i) => {
             textSummary += `${i + 1}. ${topic.topic}\n`
+          })
+          textSummary += `\n`
+        }
+
+        if (analysisResults.userTitles.length > 0) {
+          textSummary += `🏆 群友称号:\n`
+          analysisResults.userTitles.forEach((title) => {
+            textSummary += `• ${title.user} - ${title.title} (${title.mbti})\n`
+          })
+          textSummary += `\n`
+        }
+
+        if (analysisResults.goldenQuotes.length > 0) {
+          textSummary += `💎 群圣经:\n`
+          analysisResults.goldenQuotes.forEach((quote, i) => {
+            textSummary += `${i + 1}. "${quote.quote}" —— ${quote.sender}\n`
           })
         }
 
@@ -654,7 +744,7 @@ export class GroupManager extends plugin {
 
       return true
     } catch (err) {
-      logger.error(`[群聊助手] 强制生成总结错误: ${err}`)
+      logger.error(`[群聊助手] 生成增强分析报告错误: ${err}`)
       await e.reply(`生成分析失败: ${err.message}`, true)
       return false
     }

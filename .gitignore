@@ -2,3 +2,5 @@
 /config/config.yaml
 .DS_Store
 /docs
+/*.md
+!/README.md
