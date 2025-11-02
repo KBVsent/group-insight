@@ -205,27 +205,28 @@ export default class StatisticsService {
    */
   calculateEmojiStats(messages) {
     const stats = {
-      face: 0,
-      mface: 0,
-      bface: 0,
-      sface: 0,
-      animated: 0,
-      total: 0
+      face: 0,      // 普通表情数
+      mface: 0,     // 动画表情数
+      emoji: 0,     // Emoji 数
+      total: 0      // 总表情数
     }
 
     for (const msg of messages) {
       if (!msg.faces) continue
 
       if (typeof msg.faces === 'object' && !Array.isArray(msg.faces)) {
-        // 新格式
+        // 新格式（适配 Yunzai 实际消息结构）
         stats.face += msg.faces.face?.length || 0
         stats.mface += msg.faces.mface?.length || 0
-        stats.bface += msg.faces.bface?.length || 0
-        stats.sface += msg.faces.sface?.length || 0
-        stats.animated += msg.faces.animated || 0
+
+        // Emoji 统计（emoji 字段是数组，每个元素是该条消息的 emoji 数量）
+        if (Array.isArray(msg.faces.emoji)) {
+          stats.emoji += msg.faces.emoji.reduce((sum, count) => sum + count, 0)
+        }
+
         stats.total += msg.faces.total || 0
       } else if (Array.isArray(msg.faces)) {
-        // 旧格式 (只有 face)
+        // 旧格式兼容 (只有 face)
         stats.face += msg.faces.length
         stats.total += msg.faces.length
       }

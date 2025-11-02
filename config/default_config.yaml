@@ -115,8 +115,8 @@ groupManager:
     # 是否收集图片
     collectImages: false
 
-    # 是否收集表情
-    collectFaces: false
+    # 是否收集表情（必须开启才能统计表情数量）
+    collectFaces: true
 
     # 最大消息长度（超过将被截断）
     maxMessageLength: 500

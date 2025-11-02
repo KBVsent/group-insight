@@ -4,7 +4,6 @@
  * 同时处理艾特记录
  */
 
-import moment from 'moment'
 import RedisHelper from '../utils/redisHelper.js'
 
 export default class MessageCollector {
@@ -72,11 +71,10 @@ export default class MessageCollector {
     const atUsers = []
     const images = []
     const faces = {
-      face: [],      // 普通表情
-      mface: [],     // 动画表情
-      bface: [],     // 超级表情
-      sface: [],     // 小表情
-      animated: 0    // 动图数量 (通过 summary 字段检测)
+      face: [],      // 普通表情（从 raw 字段解析）
+      mface: [],     // 动画表情（从 image 的 summary 判断）
+      emoji: [],     // Emoji 表情（从文本中提取）
+      total: 0       // 总表情数
     }
     let hasReply = false
 
@@ -84,34 +82,49 @@ export default class MessageCollector {
     for (const msg of e.message) {
       if (msg.type === 'text') {
         text += msg.text
+
+        // 如果启用表情收集，统计文本中的 Emoji
+        if (this.collectFaces && msg.text) {
+          const emojiCount = this.countEmojis(msg.text)
+          if (emojiCount > 0) {
+            faces.emoji.push(emojiCount)
+            faces.total += emojiCount
+            logger.debug(`[群聊助手] 检测到 ${emojiCount} 个 Emoji 表情`)
+          }
+        }
       } else if (msg.type === 'at') {
         atUsers.push(msg.qq)
-      } else if (msg.type === 'image' && this.collectImages) {
-        // 图片可能有不同的字段：url, file
-        const imgUrl = msg.url || msg.file
-        if (imgUrl) {
-          images.push(imgUrl)
-          logger.debug(`[群聊助手] 收集图片: ${imgUrl}`)
+      } else if (msg.type === 'image') {
+        // 判断是否是动画表情
+        if (this.collectFaces && msg.summary && /动画表情|表情|sticker|emoji/i.test(msg.summary)) {
+          faces.mface.push(msg.file || msg.url)
+          faces.total++
+          logger.debug(`[群聊助手] 收集动画表情: ${msg.summary}`)
+        } else if (this.collectImages) {
+          // 普通图片
+          const imgUrl = msg.url || msg.file
+          if (imgUrl) {
+            images.push(imgUrl)
+            logger.debug(`[群聊助手] 收集图片: ${imgUrl}`)
+          }
         }
       } else if (msg.type === 'reply') {
         hasReply = true
       }
 
-      // 表情收集独立判断（不使用 else if）
-      if (this.collectFaces) {
-        if (msg.type === 'face') {
-          faces.face.push(msg.id)
-        } else if (msg.type === 'mface') {
-          faces.mface.push(msg.id)
-          // 检测是否是动画表情
-          if (msg.summary && msg.summary.includes('动画')) {
-            faces.animated++
-          }
-        } else if (msg.type === 'bface') {
-          faces.bface.push(msg.id)
-        } else if (msg.type === 'sface') {
-          faces.sface.push(msg.id)
+      // 尝试从 raw 字段解析 CQ 码中的 face
+      if (this.collectFaces && msg.raw && typeof msg.raw === 'string') {
+        const faceMatch = msg.raw.match(/\[CQ:face,id=(\d+)/i)
+        if (faceMatch) {
+          faces.face.push(faceMatch[1])
+          faces.total++
+          logger.debug(`[群聊助手] 从 raw 解析到普通表情: face ${faceMatch[1]}`)
         }
+      }
+
+      // 调试：打印所有消息段结构（仅在 DEBUG 模式）
+      if (this.collectFaces && process.env.DEBUG_MESSAGE_COLLECTOR) {
+        logger.debug(`[群聊助手] 消息段: type=${msg.type}, raw=${msg.raw}, summary=${msg.summary}, keys=${Object.keys(msg).join(',')}`)
       }
     }
 
@@ -131,6 +144,21 @@ export default class MessageCollector {
       hasReply,
       atAll: e.atall || false
     }
+  }
+
+  /**
+   * 统计文本中的 Emoji 数量
+   * @param {string} text - 文本内容
+   * @returns {number} Emoji 数量
+   */
+  countEmojis(text) {
+    if (!text) return 0
+
+    // Emoji 的 Unicode 范围（支持大部分常见 Emoji）
+    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu
+
+    const matches = text.match(emojiRegex)
+    return matches ? matches.length : 0
   }
 
   /**
@@ -158,20 +186,13 @@ export default class MessageCollector {
       messageData.images = message.images
     }
 
-    // 计算总表情数
-    const totalFaces = message.faces.face.length +
-                       message.faces.mface.length +
-                       message.faces.bface.length +
-                       message.faces.sface.length
-
-    if (totalFaces > 0 || message.faces.animated > 0) {
+    // 保存表情数据（新格式）
+    if (message.faces.total > 0) {
       messageData.faces = {
-        face: message.faces.face,
-        mface: message.faces.mface,
-        bface: message.faces.bface,
-        sface: message.faces.sface,
-        animated: message.faces.animated,
-        total: totalFaces + message.faces.animated
+        face: message.faces.face,      // 普通表情 ID 数组
+        mface: message.faces.mface,    // 动画表情 URL 数组
+        emoji: message.faces.emoji,    // Emoji 数量数组
+        total: message.faces.total     // 总表情数
       }
     }
 
@@ -219,12 +240,7 @@ export default class MessageCollector {
         messageId: replyMessageId
       }
 
-      const facesCount = message.faces.face.length +
-                        message.faces.mface.length +
-                        message.faces.bface.length +
-                        message.faces.sface.length +
-                        message.faces.animated
-      logger.debug(`[群聊助手] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${facesCount}`)
+      logger.debug(`[群聊助手] 保存艾特记录 - 文本: "${message.text}", 图片数: ${message.images.length}, 表情数: ${message.faces.total}`)
       await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
     }
   }
