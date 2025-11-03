@@ -6,6 +6,7 @@
 
 import RedisHelper from '../utils/redisHelper.js'
 import ImageRkeyManager from '../utils/imageRkeyManager.js'
+import moment from 'moment'
 
 export default class MessageCollector {
   constructor(config) {
@@ -19,6 +20,7 @@ export default class MessageCollector {
     this.maxMessageLength = msgConfig.maxMessageLength || 500
     this.collectImages = msgConfig.collectImages !== undefined ? msgConfig.collectImages : false
     this.collectFaces = msgConfig.collectFaces !== undefined ? msgConfig.collectFaces : false
+    this.contextMessageCount = config.contextMessageCount || 1  // 新增: 上下文消息数量
 
     // 定时总结白名单配置
     this.scheduleConfig = config.schedule || {}
@@ -28,7 +30,7 @@ export default class MessageCollector {
     this.isCollecting = false
     this.handler = null  // 保存处理器引用，用于移除监听器
 
-    logger.info(`[群聊洞见] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}`)
+    logger.info(`[群聊洞见] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 上下文消息: ${this.contextMessageCount}`)
     if (this.whitelist.length > 0) {
       logger.info(`[群聊洞见] 定时总结白名单: ${this.whitelist.length} 个群`)
     }
@@ -105,6 +107,9 @@ export default class MessageCollector {
 
     if (hasContent) {
       await this.saveMessage(e, message)
+
+      // 检查是否有待更新的 @ 记录（收集下一条消息）
+      await this.checkAndUpdatePendingAts(e, message)
     }
 
     // 处理艾特
@@ -303,6 +308,21 @@ export default class MessageCollector {
       }
     }
 
+    // 判断是否为纯@ (无文字内容)
+    const isPureAt = !message.text || message.text.trim() === ''
+
+    // 获取发起人的上下文消息(在@消息之前的消息)
+    let contextMessages = []
+    if (this.contextMessageCount > 0 && isPureAt) {
+      contextMessages = await this.getRecentUserMessages(
+        e.group_id,
+        e.user_id.toString(),
+        this.contextMessageCount,
+        e.time  // 只获取当前@消息之前的消息
+      )
+      logger.debug(`[群聊洞见] 获取到 ${contextMessages.length} 条上下文消息`)
+    }
+
     // 保存艾特记录
     for (const userId of atUsers) {
       const atData = {
@@ -312,10 +332,19 @@ export default class MessageCollector {
         images: message.images,
         faces: message.faces,
         time: e.time,
-        messageId: replyMessageId
+        messageId: replyMessageId,
+        contextMessages: contextMessages  // 新增: 上下文消息
       }
 
-      await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
+      const recordId = await this.redisHelper.saveAtRecord(e.group_id, userId.toString(), atData)
+
+      // 如果是纯@，保存到 pending 列表等待收集下一条消息
+      if (isPureAt && this.contextMessageCount > 0) {
+        const nextMessageTimeout = this.config.nextMessageTimeout || 300
+        const expireTime = e.time + nextMessageTimeout
+        await this.redisHelper.savePendingAt(e.group_id, e.user_id.toString(), recordId, expireTime)
+        logger.debug(`[群聊洞见] 纯@消息，等待收集下一条消息，超时时间: ${nextMessageTimeout}秒`)
+      }
     }
   }
 
@@ -375,10 +404,142 @@ export default class MessageCollector {
   }
 
   /**
+   * 获取指定用户最近的N条消息
+   * @param {string} groupId - 群号
+   * @param {string} userId - 用户ID
+   * @param {number} count - 消息数量
+   * @param {number} beforeTime - 时间戳(秒),只获取该时间点之前的消息
+   * @returns {Array} 消息数组,按时间倒序排列
+   */
+  async getRecentUserMessages(groupId, userId, count = 1, beforeTime = null) {
+    try {
+      const userMessages = []
+      const targetUserId = parseInt(userId)
+
+      logger.debug(`[群聊洞见] 开始查询用户 ${targetUserId} 在 ${beforeTime} 之前的 ${count} 条消息`)
+
+      // 获取最近7天的消息(从retentionDays配置读取)
+      const days = this.redisHelper.retentionDays
+
+      // 从今天开始往前查询
+      for (let i = 0; i < days && userMessages.length < count; i++) {
+        const date = moment().subtract(i, 'days').format('YYYY-MM-DD')
+        const key = this.redisHelper.getMessageKey(groupId, date)
+
+        let dayMessages = []
+        try {
+          // 获取该日的所有消息
+          dayMessages = await redis.lRange(key, 0, -1)
+          logger.debug(`[群聊洞见] 查询日期 ${date}，获取到 ${dayMessages.length} 条消息`)
+        } catch (err) {
+          logger.error(`[群聊洞见] Redis查询失败: ${err}`)
+          continue
+        }
+
+        // 倒序遍历(从最新的消息开始)
+        for (let j = dayMessages.length - 1; j >= 0 && userMessages.length < count; j--) {
+          try {
+            const msg = JSON.parse(dayMessages[j])
+
+            // 检查是否是目标用户的消息
+            if (msg.user_id === targetUserId) {
+              logger.debug(`[群聊洞见] 找到用户消息: time=${msg.time}, beforeTime=${beforeTime}, message=${msg.message}`)
+
+              // 如果指定了时间限制,只获取该时间之前的消息
+              if (beforeTime && msg.time >= beforeTime) {
+                logger.debug(`[群聊洞见] 消息时间 ${msg.time} >= ${beforeTime}，跳过`)
+                continue
+              }
+
+              userMessages.push({
+                message: msg.message,
+                time: msg.time,
+                images: msg.images || [],
+                faces: msg.faces || {}
+              })
+
+              logger.debug(`[群聊洞见] 已收集 ${userMessages.length}/${count} 条消息`)
+            }
+          } catch (err) {
+            logger.debug(`[群聊洞见] 解析消息失败: ${err}`)
+          }
+        }
+      }
+
+      // 按时间倒序排列(最新的在前)
+      userMessages.sort((a, b) => b.time - a.time)
+
+      logger.debug(`[群聊洞见] 最终获取到 ${userMessages.length} 条上下文消息`)
+      return userMessages.slice(0, count)
+    } catch (err) {
+      logger.error(`[群聊洞见] 获取用户最近消息失败: ${err}`)
+      return []
+    }
+  }
+
+  /**
    * 获取 rkey 管理器实例
    * @returns {ImageRkeyManager} rkey 管理器
    */
   getRkeyManager() {
     return this.rkeyManager
+  }
+
+  /**
+   * 检查并更新待处理的 @ 记录
+   * @param {object} e - 事件对象
+   * @param {object} message - 消息数据
+   */
+  async checkAndUpdatePendingAts(e, message) {
+    try {
+      // 获取该用户的待更新 @ 记录
+      const pendingRecordIds = await this.redisHelper.getPendingAts(e.group_id, e.user_id.toString())
+
+      if (pendingRecordIds.length === 0) {
+        return
+      }
+
+      logger.debug(`[群聊洞见] 发现 ${pendingRecordIds.length} 条待更新的 @ 记录`)
+
+      // 收集当前消息作为"下一条消息"
+      const nextMessages = this.collectNextMessages(message, e.time)
+
+      // 更新所有待处理的 @ 记录
+      for (const recordId of pendingRecordIds) {
+        const success = await this.redisHelper.updateAtRecordNextMessage(recordId, nextMessages)
+
+        if (success) {
+          // 从 pending 列表中移除
+          await this.redisHelper.removePendingAt(e.group_id, e.user_id.toString(), recordId)
+          logger.debug(`[群聊洞见] 成功更新 @ 记录的下一条消息: ${recordId}`)
+        }
+      }
+    } catch (err) {
+      logger.error(`[群聊洞见] 检查并更新 pending @ 记录失败: ${err}`)
+    }
+  }
+
+  /**
+   * 收集下一条消息的数据
+   * @param {object} message - 消息对象
+   * @param {number} time - 时间戳
+   * @returns {Array} 消息数组（格式与 contextMessages 一致）
+   */
+  collectNextMessages(message, time) {
+    const messages = []
+
+    // 构建与 contextMessages 相同格式的数据结构
+    // 只收集配置数量的消息（当前只有一条）
+    for (let i = 0; i < this.contextMessageCount; i++) {
+      messages.push({
+        message: message.text || '',
+        time: time,
+        images: message.images || [],
+        faces: message.faces || {}
+      })
+      break // 当前消息只有一条，所以直接 break
+    }
+
+    return messages
   }
 }

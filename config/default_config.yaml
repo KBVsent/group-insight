@@ -7,6 +7,13 @@ groupManager:
   # 艾特记录保留时间（小时）
   atRetentionHours: 24
 
+  # 艾特上下文消息数量（记录@消息前后该发起人的N条消息）
+  contextMessageCount: 1
+
+  # 等待下一条消息的超时时间（秒）
+  # 当收到纯@时，最多等待这么长时间来收集发送者的下一条消息
+  nextMessageTimeout: 300
+
   # AI 配置
   ai:
     # AI 提供商: claude / openai

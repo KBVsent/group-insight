@@ -102,6 +102,7 @@ export default class RedisHelper {
    * @param {string} groupId - 群号
    * @param {string} userId - 被艾特的用户ID
    * @param {object} atData - 艾特数据
+   * @returns {string|null} recordId - 记录ID，保存失败返回 null
    */
   async saveAtRecord(groupId, userId, atData) {
     // 生成唯一记录ID
@@ -116,7 +117,7 @@ export default class RedisHelper {
     // 如果已经过期，不保存
     if (expireSeconds <= 0) {
       logger.debug(`[群聊洞见] 艾特记录已过期，跳过保存: ${recordId}`)
-      return
+      return null
     }
 
     try {
@@ -133,6 +134,7 @@ export default class RedisHelper {
         faces: JSON.stringify(atData.faces || {}),
         time: String(atData.time),
         messageId: atData.messageId || '',
+        contextMessages: JSON.stringify(atData.contextMessages || []),  // 新增: 上下文消息
         endTime: expireTime
       }
 
@@ -150,8 +152,10 @@ export default class RedisHelper {
       }
 
       logger.debug(`[群聊洞见] 保存艾特记录成功: ${recordId}，过期时间: ${expireTime}`)
+      return recordId
     } catch (err) {
       logger.error(`[群聊洞见] 保存艾特记录失败: ${err}`)
+      return null
     }
   }
 
@@ -198,6 +202,8 @@ export default class RedisHelper {
           faces: JSON.parse(hashData.faces || '{}'),
           time: parseInt(hashData.time),
           messageId: hashData.messageId || '',
+          contextMessages: JSON.parse(hashData.contextMessages || '[]'),  // 上下文消息（之前）
+          nextMessages: JSON.parse(hashData.nextMessages || '[]'),        // 上下文消息（之后）
           endTime: hashData.endTime
         })
       }
@@ -405,6 +411,113 @@ export default class RedisHelper {
     } catch (err) {
       logger.error(`[群聊洞见] 获取报告失败: ${key}, ${err}`)
       return null
+    }
+  }
+
+  /**
+   * 获取 pending @ 记录键名 (Sorted Set)
+   * @param {string} groupId - 群号
+   * @param {string} userId - 发送@的用户ID
+   */
+  getPendingAtKey(groupId, userId) {
+    return `${this.keyPrefix}:at:pending:${groupId}_${userId}`
+  }
+
+  /**
+   * 保存待更新的 @ 记录
+   * @param {string} groupId - 群号
+   * @param {string} userId - 发送@的用户ID
+   * @param {string} recordId - @ 记录ID
+   * @param {number} expireTime - 过期时间戳(秒)
+   */
+  async savePendingAt(groupId, userId, recordId, expireTime) {
+    const pendingKey = this.getPendingAtKey(groupId, userId)
+
+    try {
+      // 添加到 Sorted Set, score = 过期时间戳
+      await redis.zAdd(pendingKey, { score: expireTime, value: recordId })
+
+      // 设置 key 过期时间（比最后一条记录的过期时间多1小时）
+      const keyExpireSeconds = expireTime - Math.floor(Date.now() / 1000) + 3600
+      if (keyExpireSeconds > 0) {
+        await redis.expire(pendingKey, keyExpireSeconds)
+      }
+
+      logger.debug(`[群聊洞见] 保存 pending @ 记录: ${recordId}, 过期时间: ${moment.unix(expireTime).format('YYYY-MM-DD HH:mm:ss')}`)
+    } catch (err) {
+      logger.error(`[群聊洞见] 保存 pending @ 记录失败: ${err}`)
+    }
+  }
+
+  /**
+   * 获取待更新的 @ 记录
+   * @param {string} groupId - 群号
+   * @param {string} userId - 发送@的用户ID
+   * @returns {Array<string>} recordId 列表
+   */
+  async getPendingAts(groupId, userId) {
+    const pendingKey = this.getPendingAtKey(groupId, userId)
+
+    try {
+      const currentTime = Math.floor(Date.now() / 1000)
+
+      // 获取未过期的 pending 记录（score > currentTime）
+      const recordIds = await redis.zRangeByScore(pendingKey, currentTime, '+inf')
+
+      // 清理已过期的记录
+      const expiredCount = await redis.zRemRangeByScore(pendingKey, '-inf', currentTime - 1)
+      if (expiredCount > 0) {
+        logger.debug(`[群聊洞见] 清理过期 pending @ 记录: ${expiredCount} 条`)
+      }
+
+      return recordIds || []
+    } catch (err) {
+      logger.error(`[群聊洞见] 获取 pending @ 记录失败: ${err}`)
+      return []
+    }
+  }
+
+  /**
+   * 更新 @ 记录添加下一条消息
+   * @param {string} recordId - @ 记录ID
+   * @param {Array} nextMessages - 下一条消息数组
+   */
+  async updateAtRecordNextMessage(recordId, nextMessages) {
+    const dataKey = this.getAtDataKey(recordId)
+
+    try {
+      // 检查记录是否存在
+      const exists = await redis.exists(dataKey)
+      if (!exists) {
+        logger.debug(`[群聊洞见] @ 记录已过期，跳过更新: ${recordId}`)
+        return false
+      }
+
+      // 更新 nextMessages 字段
+      await redis.hSet(dataKey, 'nextMessages', JSON.stringify(nextMessages))
+
+      logger.debug(`[群聊洞见] 更新 @ 记录成功: ${recordId}, 添加 ${nextMessages.length} 条后续消息`)
+      return true
+    } catch (err) {
+      logger.error(`[群聊洞见] 更新 @ 记录失败: ${err}`)
+      return false
+    }
+  }
+
+  /**
+   * 移除 pending @ 记录
+   * @param {string} groupId - 群号
+   * @param {string} userId - 发送@的用户ID
+   * @param {string} recordId - @ 记录ID
+   */
+  async removePendingAt(groupId, userId, recordId) {
+    const pendingKey = this.getPendingAtKey(groupId, userId)
+
+    try {
+      await redis.zRem(pendingKey, [recordId])
+      logger.debug(`[群聊洞见] 移除 pending @ 记录: ${recordId}`)
+    } catch (err) {
+      logger.error(`[群聊洞见] 移除 pending @ 记录失败: ${err}`)
     }
   }
 }
