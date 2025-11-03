@@ -58,11 +58,18 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
       return { userTitles: [], usage: result.usage || null }
     }
 
-    // 验证和清理数据
+    // 创建昵称到 user_id 的映射表
+    const nicknameToUserId = new Map()
+    for (const desc of userDescriptions) {
+      nicknameToUserId.set(desc.nickname, desc.user_id)
+    }
+
+    // 验证和清理数据，同时添加 user_id
     const validTitles = titles
       .filter(title => title && title.user && title.title && title.mbti && title.reason)
       .map(title => ({
         user: title.user.trim(),
+        user_id: nicknameToUserId.get(title.user.trim()) || null,  // 添加 user_id
         title: title.title.trim(),
         mbti: title.mbti.trim().toUpperCase(),
         reason: title.reason.trim()
@@ -88,6 +95,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
       const activeReplier = parseFloat(user.replyRatio) > 0.3
 
       return {
+        user_id: user.user_id,  // 保留 user_id 用于后续获取头像
         nickname: user.nickname,
         messageCount: user.messageCount,
         avgLength: user.avgLength,

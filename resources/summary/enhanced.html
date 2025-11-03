@@ -300,7 +300,7 @@
     /* 用户称号卡片 */
     .titles-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 15px;
     }
 
@@ -319,6 +319,17 @@
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
       border-color: #764ba2;
+    }
+
+    .title-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      margin: 0 auto 12px;
+      border: 3px solid #667eea;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+      object-fit: cover;
+      background: #f3f4f6;
     }
 
     .title-user {
@@ -573,6 +584,9 @@
         <div class="titles-grid">
           {{each userTitles item}}
           <div class="title-card">
+            {{if item.user_id}}
+            <img class="title-avatar" src="https://q1.qlogo.cn/g?b=qq&nk={{item.user_id}}&s=100" alt="{{item.user}}" onerror="this.style.display='none'">
+            {{/if}}
             <div class="title-user"><i class="fas fa-user"></i> {{item.user}}</div>
             <div class="title-badge"><i class="fas fa-award"></i> {{item.title}}</div>
             <div class="title-mbti"><i class="fas fa-brain"></i> {{item.mbti}}</div>

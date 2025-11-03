@@ -31,7 +31,7 @@ export class ReportPlugin extends plugin {
       priority: 5000,
       rule: [
         {
-          reg: '^#群聊报告\\s*(今天|昨天|前天|\\d{4}-\\d{2}-\\d{2})?$',
+          reg: '^#群聊(总结|报告)\\s*(今天|昨天|前天|\\d{4}-\\d{2}-\\d{2})?$',
           fnc: 'generateReport',
           permission: 'all'
         },
