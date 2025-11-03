@@ -31,7 +31,7 @@ export default class AIService {
     }
 
     if (!this.apiKey) {
-      logger.warn('[群聊助手] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
+      logger.warn('[群聊洞见] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
       return false
     }
 
@@ -44,15 +44,15 @@ export default class AIService {
           await this.initOpenAI()
           break
         default:
-          logger.error(`[群聊助手] 不支持的 AI 提供商: ${this.provider}`)
+          logger.error(`[群聊洞见] 不支持的 AI 提供商: ${this.provider}`)
           return false
       }
 
       this.initialized = true
-      logger.info(`[群聊助手] AI 服务初始化成功，提供商: ${this.provider}`)
+      logger.info(`[群聊洞见] AI 服务初始化成功，提供商: ${this.provider}`)
       return true
     } catch (err) {
-      logger.error(`[群聊助手] AI 服务初始化失败: ${err}`)
+      logger.error(`[群聊洞见] AI 服务初始化失败: ${err}`)
       return false
     }
   }
@@ -73,8 +73,8 @@ export default class AIService {
 
       this.model = this.model || 'claude-3-5-sonnet-20241022'
     } catch (err) {
-      logger.error('[群聊助手] @anthropic-ai/sdk 未安装')
-      logger.warn('[群聊助手] 请运行: cd plugins/group-insight && pnpm install')
+      logger.error('[群聊洞见] @anthropic-ai/sdk 未安装')
+      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
       throw err
     }
   }
@@ -95,8 +95,8 @@ export default class AIService {
 
       this.model = this.model || 'gpt-4o'
     } catch (err) {
-      logger.error('[群聊助手] openai 未安装')
-      logger.warn('[群聊助手] 请运行: cd plugins/group-insight && pnpm add openai')
+      logger.error('[群聊洞见] openai 未安装')
+      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm add openai')
       throw err
     }
   }
@@ -134,7 +134,7 @@ export default class AIService {
       // 构建 Prompt（包含历史总结上下文）
       const prompt = this.buildPrompt(formattedMessages, groupName, days, previousSummary)
 
-      logger.info(`[群聊助手] 开始调用 AI 总结，消息数: ${formattedMessages.length}${previousSummary ? '（包含历史总结上下文）' : ''}`)
+      logger.info(`[群聊洞见] 开始调用 AI 总结，消息数: ${formattedMessages.length}${previousSummary ? '（包含历史总结上下文）' : ''}`)
 
       // 调用 AI
       let summary
@@ -149,7 +149,7 @@ export default class AIService {
           return { success: false, error: '不支持的 AI 提供商' }
       }
 
-      logger.info('[群聊助手] AI 总结完成')
+      logger.info('[群聊洞见] AI 总结完成')
 
       return {
         success: true,
@@ -159,7 +159,7 @@ export default class AIService {
         model: this.model
       }
     } catch (err) {
-      logger.error(`[群聊助手] AI 总结失败: ${err}`)
+      logger.error(`[群聊洞见] AI 总结失败: ${err}`)
       return { success: false, error: err.message }
     }
   }

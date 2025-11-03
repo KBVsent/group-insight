@@ -7,7 +7,7 @@ import { Config, getMessageCollector, reinitializeServices } from '../components
 export class AdminPlugin extends plugin {
   constructor() {
     super({
-      name: '群聊助手-管理',
+      name: '群聊洞见',
       dsc: '管理命令',
       event: 'message',
       priority: 5000,

@@ -25,7 +25,7 @@ const pluginRoot = join(__dirname, '..')
 export class ReportPlugin extends plugin {
   constructor() {
     super({
-      name: '群聊助手-报告',
+      name: '群聊洞见',
       dsc: 'AI 增强分析报告',
       event: 'message.group',
       priority: 5000,
@@ -80,27 +80,27 @@ export class ReportPlugin extends plugin {
     if (config?.analysis?.activity?.enabled !== false) enabledFeatures.push('活跃度图表')
 
     if (enabledFeatures.length > 0) {
-      logger.info(`[群聊助手-报告] 增强分析功能已启用: ${enabledFeatures.join('、')}`)
+      logger.info(`[群聊洞见-报告] 增强分析功能已启用: ${enabledFeatures.join('、')}`)
     }
 
     // 显示 AI 服务状态
     if (!aiService) {
-      logger.warn('[群聊助手-报告] AI 服务未启用，将使用基础统计功能')
+      logger.warn('[群聊洞见-报告] AI 服务未启用，将使用基础统计功能')
     }
 
     // 显示定时总结状态
     const scheduleEnabled = config?.schedule?.enabled !== false
     const whitelist = config?.schedule?.whitelist || []
     if (scheduleEnabled && whitelist.length > 0) {
-      logger.info(`[群聊助手-报告] 定时总结已启用，白名单群数: ${whitelist.length}`)
+      logger.info(`[群聊洞见-报告] 定时总结已启用，白名单群数: ${whitelist.length}`)
     } else {
-      logger.info('[群聊助手-报告] 定时总结未启用（需配置白名单群）')
+      logger.info('[群聊洞见-报告] 定时总结未启用（需配置白名单群）')
     }
 
     // 监听配置变更
     Config.onChange(async (newConfig) => {
       await reinitializeServices(newConfig)
-      logger.mark('[群聊助手-报告] 服务已重新初始化')
+      logger.mark('[群聊洞见-报告] 服务已重新初始化')
     })
   }
 
@@ -110,7 +110,7 @@ export class ReportPlugin extends plugin {
   async scheduledReport() {
     const messageCollector = getMessageCollector()
     if (!messageCollector) {
-      logger.warn('[群聊助手-报告] 定时报告功能未就绪')
+      logger.warn('[群聊洞见-报告] 定时报告功能未就绪')
       return
     }
 
@@ -123,11 +123,11 @@ export class ReportPlugin extends plugin {
 
     // 检查是否启用
     if (!enabled || whitelist.length === 0) {
-      logger.debug('[群聊助手-报告] 定时报告未启用或白名单为空，跳过')
+      logger.debug('[群聊洞见-报告] 定时报告未启用或白名单为空，跳过')
       return
     }
 
-    logger.mark(`[群聊助手-报告] 开始执行定时报告任务 (白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
+    logger.mark(`[群聊洞见-报告] 开始执行定时报告任务 (白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
 
     // 使用并发限制处理白名单群
     const results = await this.runWithConcurrency(
@@ -138,7 +138,7 @@ export class ReportPlugin extends plugin {
           const messages = await messageCollector.getMessages(groupId, 1)
 
           if (messages.length < minMessages) {
-            logger.debug(`[群聊助手-报告] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
+            logger.debug(`[群聊洞见-报告] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
             return { groupId, status: 'skipped', reason: 'insufficient_messages' }
           }
 
@@ -152,15 +152,15 @@ export class ReportPlugin extends plugin {
               groupName = groupInfo?.group_name || groupInfo?.name || groupName
             }
           } catch (err) {
-            logger.debug(`[群聊助手-报告] 获取群 ${groupId} 名称失败，使用默认名称`)
+            logger.debug(`[群聊洞见-报告] 获取群 ${groupId} 名称失败，使用默认名称`)
           }
 
           // 执行分析
-          logger.info(`[群聊助手-报告] 正在为群 ${groupId} (${groupName}) 生成报告 (消息数: ${messages.length})`)
+          logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成报告 (消息数: ${messages.length})`)
           const analysisResults = await this.performAnalysis(messages, 1)
 
           if (!analysisResults) {
-            logger.warn(`[群聊助手-报告] 群 ${groupId} 报告生成失败：分析失败`)
+            logger.warn(`[群聊洞见-报告] 群 ${groupId} 报告生成失败：分析失败`)
             return { groupId, status: 'failed', error: 'analysis_failed' }
           }
 
@@ -175,10 +175,10 @@ export class ReportPlugin extends plugin {
             tokenUsage: analysisResults.tokenUsage
           })
 
-          logger.mark(`[群聊助手-报告] 群 ${groupId} 报告生成成功 (${messages.length} 条消息)`)
+          logger.mark(`[群聊洞见-报告] 群 ${groupId} 报告生成成功 (${messages.length} 条消息)`)
           return { groupId, status: 'success', messageCount: messages.length }
         } catch (err) {
-          logger.error(`[群聊助手-报告] 群 ${groupId} 定时报告异常: ${err}`)
+          logger.error(`[群聊洞见-报告] 群 ${groupId} 定时报告异常: ${err}`)
           return { groupId, status: 'error', error: err.message }
         }
       },
@@ -194,7 +194,7 @@ export class ReportPlugin extends plugin {
       error: results.filter(r => r.status === 'error').length
     }
 
-    logger.mark(`[群聊助手-报告] 定时报告任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
+    logger.mark(`[群聊洞见-报告] 定时报告任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
   }
 
   /**
@@ -265,7 +265,7 @@ export class ReportPlugin extends plugin {
         return this.reply(`${dateLabel}还没有生成报告`, true)
       }
 
-      logger.info(`[群聊助手-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告`)
+      logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告`)
 
       // 获取群名
       let groupName = '未知群聊'
@@ -320,7 +320,7 @@ export class ReportPlugin extends plugin {
         return this.reply(textSummary, true)
       }
     } catch (err) {
-      logger.error(`[群聊助手-报告] 查询报告错误: ${err}`)
+      logger.error(`[群聊洞见-报告] 查询报告错误: ${err}`)
       return this.reply(`查询报告失败: ${err.message}`, true)
     }
   }
@@ -355,7 +355,7 @@ export class ReportPlugin extends plugin {
         groupName = `群${e.group_id}`
       }
 
-      logger.info(`[群聊助手-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
+      logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
 
       // 执行分析
       const analysisResults = await this.performAnalysis(messages, 1)
@@ -375,7 +375,7 @@ export class ReportPlugin extends plugin {
         tokenUsage: analysisResults.tokenUsage
       })
 
-      logger.mark(`[群聊助手-报告] 主人强制生成报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+      logger.mark(`[群聊洞见-报告] 主人强制生成报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
       // 渲染并发送报告
       const img = await this.renderReport(analysisResults, {
@@ -392,7 +392,7 @@ export class ReportPlugin extends plugin {
         return this.reply('报告已生成并保存，但渲染失败', true)
       }
     } catch (err) {
-      logger.error(`[群聊助手-报告] 强制生成报告错误: ${err}`)
+      logger.error(`[群聊洞见-报告] 强制生成报告错误: ${err}`)
       return this.reply(`生成报告失败: ${err.message}`, true)
     }
   }
@@ -408,16 +408,16 @@ export class ReportPlugin extends plugin {
       const goldenQuoteAnalyzer = getGoldenQuoteAnalyzer()
       const userTitleAnalyzer = getUserTitleAnalyzer()
 
-      logger.info(`[群聊助手-报告] 开始增强分析 (消息数: ${messages.length})`)
+      logger.info(`[群聊洞见-报告] 开始增强分析 (消息数: ${messages.length})`)
 
       // 1. 基础统计分析
       const stats = statisticsService.analyze(messages)
-      logger.info(`[群聊助手-报告] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
+      logger.info(`[群聊洞见-报告] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
 
       // 检查是否满足最小消息数阈值
       const minThreshold = config?.analysis?.min_messages_threshold || 20
       if (messages.length < minThreshold) {
-        logger.warn(`[群聊助手-报告] 消息数 (${messages.length}) 少于阈值 (${minThreshold}), 跳过 AI 分析`)
+        logger.warn(`[群聊洞见-报告] 消息数 (${messages.length}) 少于阈值 (${minThreshold}), 跳过 AI 分析`)
         return {
           stats,
           topics: [],
@@ -437,7 +437,7 @@ export class ReportPlugin extends plugin {
           topicAnalyzer.analyze(messages, stats)
             .then(result => ({ type: 'topics', data: result.topics, usage: result.usage }))
             .catch(err => {
-              logger.error(`[群聊助手-报告] 话题分析失败: ${err}`)
+              logger.error(`[群聊洞见-报告] 话题分析失败: ${err}`)
               return { type: 'topics', data: [], usage: null }
             })
         )
@@ -449,7 +449,7 @@ export class ReportPlugin extends plugin {
           goldenQuoteAnalyzer.analyze(messages, stats)
             .then(result => ({ type: 'goldenQuotes', data: result.goldenQuotes, usage: result.usage }))
             .catch(err => {
-              logger.error(`[群聊助手-报告] 金句提取失败: ${err}`)
+              logger.error(`[群聊洞见-报告] 金句提取失败: ${err}`)
               return { type: 'goldenQuotes', data: [], usage: null }
             })
         )
@@ -461,7 +461,7 @@ export class ReportPlugin extends plugin {
           userTitleAnalyzer.analyze(messages, stats)
             .then(result => ({ type: 'userTitles', data: result.userTitles, usage: result.usage }))
             .catch(err => {
-              logger.error(`[群聊助手-报告] 用户称号分析失败: ${err}`)
+              logger.error(`[群聊洞见-报告] 用户称号分析失败: ${err}`)
               return { type: 'userTitles', data: [], usage: null }
             })
         )
@@ -495,11 +495,11 @@ export class ReportPlugin extends plugin {
         }
       }
 
-      logger.info(`[群聊助手-报告] 增强分析完成 - 话题: ${analysisResults.topics.length}, 金句: ${analysisResults.goldenQuotes.length}, 称号: ${analysisResults.userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
+      logger.info(`[群聊洞见-报告] 增强分析完成 - 话题: ${analysisResults.topics.length}, 金句: ${analysisResults.goldenQuotes.length}, 称号: ${analysisResults.userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
 
       return analysisResults
     } catch (err) {
-      logger.error(`[群聊助手-报告] 增强分析失败: ${err}`)
+      logger.error(`[群聊洞见-报告] 增强分析失败: ${err}`)
       return null
     }
   }
@@ -578,7 +578,7 @@ export class ReportPlugin extends plugin {
 
       return img
     } catch (err) {
-      logger.error(`[群聊助手-报告] 渲染增强总结失败: ${err}`)
+      logger.error(`[群聊洞见-报告] 渲染增强总结失败: ${err}`)
       return null
     }
   }

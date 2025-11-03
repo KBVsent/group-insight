@@ -31,7 +31,7 @@ export function getMessageCollector() {
     if (config?.messageCollection?.enabled !== false) {
       messageCollector = new MessageCollector(config)
       messageCollector.startCollecting()
-      logger.info('[群聊助手] 消息收集器已启动')
+      logger.info('[群聊洞见] 消息收集器已启动')
     }
   }
   return messageCollector
@@ -64,15 +64,15 @@ export function getAIService() {
         aiService = new AIService(aiConfig)
         // 立即初始化，避免并发调用时的竞态条件
         aiService.init().catch(err => {
-          logger.warn('[群聊助手] AI 服务初始化失败:', err.message)
+          logger.warn('[群聊洞见] AI 服务初始化失败:', err.message)
           aiService = null
         })
       } catch (err) {
-        logger.warn('[群聊助手] AI 服务初始化失败:', err.message)
+        logger.warn('[群聊洞见] AI 服务初始化失败:', err.message)
         aiService = null
       }
     } else {
-      logger.debug('[群聊助手] AI 服务未配置 (缺少 apiKey)')
+      logger.debug('[群聊洞见] AI 服务未配置 (缺少 apiKey)')
     }
   }
   return aiService
@@ -114,7 +114,7 @@ export function getTopicAnalyzer() {
 
     // 如果 AI 服务未启用，不初始化分析器
     if (!aiSvc) {
-      logger.debug('[群聊助手] AI 服务未启用，跳过话题分析器初始化')
+      logger.debug('[群聊洞见] AI 服务未启用，跳过话题分析器初始化')
       return null
     }
 
@@ -140,7 +140,7 @@ export function getGoldenQuoteAnalyzer() {
 
     // 如果 AI 服务未启用，不初始化分析器
     if (!aiSvc) {
-      logger.debug('[群聊助手] AI 服务未启用，跳过金句分析器初始化')
+      logger.debug('[群聊洞见] AI 服务未启用，跳过金句分析器初始化')
       return null
     }
 
@@ -166,7 +166,7 @@ export function getUserTitleAnalyzer() {
 
     // 如果 AI 服务未启用，不初始化分析器
     if (!aiSvc) {
-      logger.debug('[群聊助手] AI 服务未启用，跳过用户称号分析器初始化')
+      logger.debug('[群聊洞见] AI 服务未启用，跳过用户称号分析器初始化')
       return null
     }
 
@@ -186,7 +186,7 @@ export function getUserTitleAnalyzer() {
  * 重新初始化所有服务（配置变更时调用）
  */
 export async function reinitializeServices(newConfig) {
-  logger.info('[群聊助手] 正在重新初始化服务...')
+  logger.info('[群聊洞见] 正在重新初始化服务...')
 
   // 停止消息收集器
   if (messageCollector) {
@@ -207,10 +207,10 @@ export async function reinitializeServices(newConfig) {
   if (newConfig.messageCollection?.enabled !== false) {
     messageCollector = new MessageCollector(newConfig)
     messageCollector.startCollecting()
-    logger.info('[群聊助手] 消息收集器已重新启动')
+    logger.info('[群聊洞见] 消息收集器已重新启动')
   }
 
-  logger.info('[群聊助手] 服务重新初始化完成')
+  logger.info('[群聊洞见] 服务重新初始化完成')
 }
 
 /**
@@ -228,5 +228,5 @@ export function stopAllServices() {
   topicAnalyzer = null
   goldenQuoteAnalyzer = null
   userTitleAnalyzer = null
-  logger.info('[群聊助手] 所有服务已停止')
+  logger.info('[群聊洞见] 所有服务已停止')
 }

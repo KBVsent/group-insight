@@ -28,15 +28,15 @@ try {
     try {
       const mod = await import(`./apps/${file}`)
       Object.assign(apps, mod)
-      logger.info(`[群聊助手] 已加载: apps/${file}`)
+      logger.info(`[群聊洞见] 已加载: apps/${file}`)
     } catch (err) {
-      logger.error(`[群聊助手] 加载 apps/${file} 失败:`, err)
+      logger.error(`[群聊洞见] 加载 apps/${file} 失败:`, err)
     }
   }
 
-  logger.info(`[群聊助手] 插件初始化完成 (${Object.keys(apps).length} 个模块)`)
+  logger.info(`[群聊洞见] 插件初始化完成 (${Object.keys(apps).length} 个模块)`)
 } catch (err) {
-  logger.error('[群聊助手] 插件初始化失败:', err)
+  logger.error('[群聊洞见] 插件初始化失败:', err)
 }
 
 export { apps }

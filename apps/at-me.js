@@ -8,7 +8,7 @@ import { getMessageCollector } from '../components/index.js'
 export class AtMePlugin extends plugin {
   constructor() {
     super({
-      name: '群聊助手-谁艾特我',
+      name: '群聊洞见',
       dsc: '查看谁艾特了你',
       event: 'message.group',
       priority: 5000,
@@ -28,7 +28,7 @@ export class AtMePlugin extends plugin {
   async init() {
     // 初始化共享服务（由 Services 模块统一管理）
     getMessageCollector()
-    logger.info('[群聊助手-谁艾特我] 插件已初始化')
+    logger.info('[群聊洞见-谁艾特我] 插件已初始化')
   }
 
   /**
@@ -78,7 +78,7 @@ export class AtMePlugin extends plugin {
           try {
             msg.push(segment.face(faceId))
           } catch (err) {
-            logger.debug(`[群聊助手] 发送表情失败 (face ${faceId}): ${err.message}`)
+            logger.debug(`[群聊洞见] 发送表情失败 (face ${faceId}): ${err.message}`)
           }
         }
       }
@@ -131,7 +131,7 @@ export class AtMePlugin extends plugin {
 
       return this.reply(forwardMsg)
     } catch (err) {
-      logger.error(`[群聊助手] 发送合并转发消息失败: ${err}`)
+      logger.error(`[群聊洞见] 发送合并转发消息失败: ${err}`)
       return this.reply('发送消息失败，请查看日志', true)
     }
   }

@@ -7,7 +7,7 @@ import { Config, getMessageCollector, getWordCloudGenerator, reinitializeService
 export class WordCloudPlugin extends plugin {
   constructor() {
     super({
-      name: '群聊助手-词云',
+      name: '群聊洞见',
       dsc: '生成群聊词云图',
       event: 'message.group',
       priority: 5000,
@@ -32,7 +32,7 @@ export class WordCloudPlugin extends plugin {
     // 监听配置变更
     Config.onChange(async (newConfig) => {
       await reinitializeServices(newConfig)
-      logger.mark('[群聊助手-词云] 服务已重新初始化')
+      logger.mark('[群聊洞见-词云] 服务已重新初始化')
     })
   }
 
@@ -71,7 +71,7 @@ export class WordCloudPlugin extends plugin {
         const groupInfo = await e.group.getInfo?.()
         groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
       } catch (err) {
-        logger.debug(`[群聊助手] 获取群名失败: ${err}，使用群号作为群名`)
+        logger.debug(`[群聊洞见] 获取群名失败: ${err}，使用群号作为群名`)
         groupName = `群${e.group_id}`
       }
 
@@ -88,7 +88,7 @@ export class WordCloudPlugin extends plugin {
 
       return this.reply(img)
     } catch (err) {
-      logger.error(`[群聊助手] 词云生成错误: ${err}`)
+      logger.error(`[群聊洞见] 词云生成错误: ${err}`)
       return this.reply(`词云生成失败: ${err.message}`, true)
     }
   }

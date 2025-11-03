@@ -35,10 +35,10 @@ export default class TextProcessor {
       this.stopwords = new Set(stopwords)
 
       this.initialized = true
-      logger.info('[群聊助手] 文本处理器初始化成功')
+      logger.info('[群聊洞见] 文本处理器初始化成功')
     } catch (err) {
-      logger.error(`[群聊助手] 文本处理器初始化失败: ${err}`)
-      logger.warn('[群聊助手] 请运行: cd plugins/group-insight && pnpm install')
+      logger.error(`[群聊洞见] 文本处理器初始化失败: ${err}`)
+      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
       this.initialized = false
     }
   }
@@ -71,7 +71,7 @@ export default class TextProcessor {
   cut(text, minLength = 2) {
     if (!this.initialized || !this.jieba) {
       // 如果未初始化，使用简单的字符分割
-      logger.warn('[群聊助手] 分词器未初始化，使用简单分词')
+      logger.warn('[群聊洞见] 分词器未初始化，使用简单分词')
       return this.simpleCut(text, minLength)
     }
 
@@ -87,7 +87,7 @@ export default class TextProcessor {
         return true
       })
     } catch (err) {
-      logger.error(`[群聊助手] 分词失败: ${err}`)
+      logger.error(`[群聊洞见] 分词失败: ${err}`)
       return this.simpleCut(text, minLength)
     }
   }

@@ -32,7 +32,7 @@ class Config {
       const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
       config = YAML.parse(defaultConfig).groupManager || {}
     } else {
-      logger.warn('[群聊助手] 默认配置文件不存在')
+      logger.warn('[群聊洞见] 默认配置文件不存在')
       return config
     }
 
@@ -41,9 +41,9 @@ class Config {
       const userConfig = fs.readFileSync(userConfigPath, 'utf8')
       const userSettings = YAML.parse(userConfig).groupManager || {}
       config = { ...config, ...userSettings }
-      logger.info('[群聊助手] 已加载用户配置')
+      logger.info('[群聊洞见] 已加载用户配置')
     } else {
-      logger.info('[群聊助手] 未找到用户配置，使用默认配置')
+      logger.info('[群聊洞见] 未找到用户配置，使用默认配置')
     }
 
     this.config = config
@@ -55,7 +55,7 @@ class Config {
    */
   watch() {
     if (this.watcher) {
-      logger.debug('[群聊助手] 配置监听器已存在')
+      logger.debug('[群聊洞见] 配置监听器已存在')
       return
     }
 
@@ -72,7 +72,7 @@ class Config {
       })
 
       this.watcher.on('change', async () => {
-        logger.mark('[群聊助手] 检测到配置文件修改，正在重新加载...')
+        logger.mark('[群聊洞见] 检测到配置文件修改，正在重新加载...')
 
         try {
           const oldConfig = this.config
@@ -83,17 +83,17 @@ class Config {
             try {
               await callback(this.config, oldConfig)
             } catch (err) {
-              logger.error(`[群聊助手] 配置回调执行失败: ${err}`)
+              logger.error(`[群聊洞见] 配置回调执行失败: ${err}`)
             }
           }
 
-          logger.mark('[群聊助手] 配置文件重新加载完成')
+          logger.mark('[群聊洞见] 配置文件重新加载完成')
         } catch (err) {
-          logger.error(`[群聊助手] 配置文件重新加载失败: ${err}`)
+          logger.error(`[群聊洞见] 配置文件重新加载失败: ${err}`)
         }
       })
 
-      logger.info('[群聊助手] 配置文件热重载已启用')
+      logger.info('[群聊洞见] 配置文件热重载已启用')
     }
   }
 
@@ -111,7 +111,7 @@ class Config {
     if (this.watcher) {
       this.watcher.close()
       this.watcher = null
-      logger.info('[群聊助手] 配置监听已停止')
+      logger.info('[群聊洞见] 配置监听已停止')
     }
   }
 
