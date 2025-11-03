@@ -39,28 +39,47 @@
     canvas.width = {{width}};
     canvas.height = {{height}};
 
-    // 动态计算词云参数，确保铺满画面
+    // 动态计算词云参数，确保所有词都能显示
     const wordCount = wordList.length;
-    const canvasArea = canvas.width * canvas.height;
 
-    // 根据词语数量动态调整密度和大小
-    // 词语越少，字越大；词语越多，密度越高
-    const densityFactor = Math.max(0.3, Math.min(1.0, 50 / wordCount));
-    const sizeFactor = Math.max(1.5, Math.min(4.0, 100 / wordCount));
+    // 根据词语数量动态调整参数，确保词语既能显示又足够大
+    // 词少时：增大字体，但允许自适应缩放以确保显示
+    // 词多时：减小字体，提高密度
+    let gridSize, weightFactor, minSize;
 
-    // 配置词云 - 优化后的参数让词语更大更密集
+    if (wordCount < 20) {
+      // 极少词汇：大字体 + 低密度 + 允许缩放
+      gridSize = 12;
+      weightFactor = canvas.width / 80;
+      minSize = Math.max(24, canvas.width / 30);
+    } else if (wordCount < 50) {
+      // 较少词汇：中等字体 + 中等密度
+      gridSize = 10;
+      weightFactor = canvas.width / 100;
+      minSize = Math.max(20, canvas.width / 35);
+    } else if (wordCount < 100) {
+      // 中等词汇：标准参数
+      gridSize = 8;
+      weightFactor = canvas.width / 120;
+      minSize = Math.max(16, canvas.width / 40);
+    } else {
+      // 大量词汇：小字体 + 高密度
+      gridSize = 6;
+      weightFactor = canvas.width / 150;
+      minSize = Math.max(12, canvas.width / 50);
+    }
+
+    // 配置词云 - 修复后的参数确保词语能够显示
     WordCloud(canvas, {
       list: wordList,
-      // 减小网格间距，让词语更密集（原来是 16，现在是 6-8）
-      gridSize: Math.round(6 * densityFactor),
-      // 大幅增加字体大小权重（原来乘以 1.76，现在乘以 8-15）
+      gridSize: gridSize,
       weightFactor: function (size) {
-        return Math.pow(size, 1.5) * sizeFactor * canvas.width / 200;
+        // 使用线性缩放，避免过大的指数增长
+        return size * weightFactor;
       },
       fontFamily: 'Microsoft YaHei, PingFang SC, SimHei, sans-serif',
-      fontWeight: '600',  // 加粗字体，更清晰
+      fontWeight: '600',
       color: function () {
-        // 更鲜艳的颜色
         const colors = [
           '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
           '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#8b5cf6',
@@ -68,14 +87,14 @@
         ];
         return colors[Math.floor(Math.random() * colors.length)];
       },
-      rotateRatio: 0.2,  // 减少旋转，提高可读性
+      rotateRatio: 0.2,
       rotationSteps: 2,
       backgroundColor: '{{backgroundColor}}',
-      minSize: Math.max(20, canvas.width / 40),  // 最小字号显著提高（原来 12，现在至少 20）
+      minSize: minSize,
       drawOutOfBound: false,
-      shrinkToFit: false,  // 不自动缩小，保持大字体
+      shrinkToFit: true,  // 关键修复：允许自动缩小以确保所有词都能显示
       clearCanvas: true,
-      wait: 0  // 立即渲染，不等待
+      // 移除 wait 参数，让词云库使用默认值（有足够时间渲染）
     });
   </script>
 </body>
