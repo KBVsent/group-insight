@@ -99,6 +99,13 @@ export function getTopicAnalyzer() {
   if (!topicAnalyzer) {
     const config = Config.get()
     const aiSvc = getAIService()
+
+    // 如果 AI 服务未启用，不初始化分析器
+    if (!aiSvc) {
+      logger.debug('[群聊助手] AI 服务未启用，跳过话题分析器初始化')
+      return null
+    }
+
     const analysisConfig = {
       llm_timeout: config?.ai?.llm_timeout || 100,
       llm_retries: config?.ai?.llm_retries || 2,
@@ -118,6 +125,13 @@ export function getGoldenQuoteAnalyzer() {
   if (!goldenQuoteAnalyzer) {
     const config = Config.get()
     const aiSvc = getAIService()
+
+    // 如果 AI 服务未启用，不初始化分析器
+    if (!aiSvc) {
+      logger.debug('[群聊助手] AI 服务未启用，跳过金句分析器初始化')
+      return null
+    }
+
     const analysisConfig = {
       llm_timeout: config?.ai?.llm_timeout || 100,
       llm_retries: config?.ai?.llm_retries || 2,
@@ -137,6 +151,13 @@ export function getUserTitleAnalyzer() {
   if (!userTitleAnalyzer) {
     const config = Config.get()
     const aiSvc = getAIService()
+
+    // 如果 AI 服务未启用，不初始化分析器
+    if (!aiSvc) {
+      logger.debug('[群聊助手] AI 服务未启用，跳过用户称号分析器初始化')
+      return null
+    }
+
     const analysisConfig = {
       llm_timeout: config?.ai?.llm_timeout || 100,
       llm_retries: config?.ai?.llm_retries || 2,

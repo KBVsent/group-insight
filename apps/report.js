@@ -60,22 +60,32 @@ export class ReportPlugin extends plugin {
 
     // 初始化共享服务（由 Services 模块统一管理）
     getMessageCollector()
-    getAIService()
+    const aiService = getAIService()
     getStatisticsService()
     getActivityVisualizer()
+
+    // 初始化分析器（如果 AI 服务可用）
     getTopicAnalyzer()
     getGoldenQuoteAnalyzer()
     getUserTitleAnalyzer()
 
     // 显示功能状态
     const enabledFeatures = []
-    if (config?.analysis?.topic?.enabled !== false) enabledFeatures.push('话题分析')
-    if (config?.analysis?.goldenQuote?.enabled !== false) enabledFeatures.push('金句提取')
-    if (config?.analysis?.userTitle?.enabled !== false) enabledFeatures.push('用户称号')
+    if (aiService) {
+      // AI 服务可用，显示 AI 增强功能
+      if (config?.analysis?.topic?.enabled !== false) enabledFeatures.push('话题分析')
+      if (config?.analysis?.goldenQuote?.enabled !== false) enabledFeatures.push('金句提取')
+      if (config?.analysis?.userTitle?.enabled !== false) enabledFeatures.push('用户称号')
+    }
     if (config?.analysis?.activity?.enabled !== false) enabledFeatures.push('活跃度图表')
 
     if (enabledFeatures.length > 0) {
       logger.info(`[群聊助手-报告] 增强分析功能已启用: ${enabledFeatures.join('、')}`)
+    }
+
+    // 显示 AI 服务状态
+    if (!aiService) {
+      logger.warn('[群聊助手-报告] AI 服务未启用，将使用基础统计功能')
     }
 
     // 显示定时总结状态
@@ -422,7 +432,7 @@ export class ReportPlugin extends plugin {
       const analysisPromises = []
 
       // 话题分析
-      if (config?.analysis?.topic?.enabled !== false) {
+      if (config?.analysis?.topic?.enabled !== false && topicAnalyzer) {
         analysisPromises.push(
           topicAnalyzer.analyze(messages, stats)
             .then(result => ({ type: 'topics', data: result.topics, usage: result.usage }))
@@ -434,7 +444,7 @@ export class ReportPlugin extends plugin {
       }
 
       // 金句提取
-      if (config?.analysis?.goldenQuote?.enabled !== false) {
+      if (config?.analysis?.goldenQuote?.enabled !== false && goldenQuoteAnalyzer) {
         analysisPromises.push(
           goldenQuoteAnalyzer.analyze(messages, stats)
             .then(result => ({ type: 'goldenQuotes', data: result.goldenQuotes, usage: result.usage }))
@@ -446,7 +456,7 @@ export class ReportPlugin extends plugin {
       }
 
       // 用户称号
-      if (config?.analysis?.userTitle?.enabled !== false) {
+      if (config?.analysis?.userTitle?.enabled !== false && userTitleAnalyzer) {
         analysisPromises.push(
           userTitleAnalyzer.analyze(messages, stats)
             .then(result => ({ type: 'userTitles', data: result.userTitles, usage: result.usage }))
