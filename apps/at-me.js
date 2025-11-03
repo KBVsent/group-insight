@@ -2,6 +2,7 @@
  * 谁艾特我功能
  */
 import plugin from '../../../lib/plugins/plugin.js'
+import { segment } from 'icqq'
 import { getMessageCollector } from '../components/index.js'
 
 export class AtMePlugin extends plugin {
