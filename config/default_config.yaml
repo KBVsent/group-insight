@@ -9,7 +9,10 @@ groupManager:
 
   # AI 配置
   ai:
-    # AI 提供商: claude / openai / qwen / other
+    # AI 提供商: claude / openai
+    # 注意：目前仅支持这两个提供商
+    # - claude: 使用 Anthropic Claude (需要安装 @anthropic-ai/sdk)
+    # - openai: 使用 OpenAI 或兼容 OpenAI API 的服务 (需要安装 openai)
     provider: 'claude'
 
     # API Key (请在 config/config/group-insight.yaml 中配置)
@@ -141,12 +144,6 @@ groupManager:
 
   # 总结功能配置
   summary:
-    # 是否将上次总结作为上下文输入给 AI
-    includeContext: true
-
-    # 总结保留天数（0 = 永久保存）
-    retentionDays: 0
-
     # 渲染质量配置
     render:
       # 图片格式：jpeg 或 png（png 无损但文件更大）

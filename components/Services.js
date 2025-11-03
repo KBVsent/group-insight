@@ -54,13 +54,21 @@ export function getWordCloudGenerator() {
 export function getAIService() {
   if (!aiService) {
     const config = Config.get()
-    if (config?.ai?.enabled) {
+    // AI 服务是否启用：检查是否配置了 apiKey
+    const aiConfig = config?.ai
+    const isAIEnabled = aiConfig && aiConfig.apiKey
+
+    if (isAIEnabled) {
       try {
-        aiService = new AIService(config)
-        logger.info('[群聊助手] AI 服务已初始化')
+        // 传递 AI 配置对象（不是整个 config）
+        aiService = new AIService(aiConfig)
+        logger.info(`[群聊助手] AI 服务已初始化 (${aiConfig.provider || 'claude'})`)
       } catch (err) {
         logger.warn('[群聊助手] AI 服务初始化失败:', err.message)
+        aiService = null
       }
+    } else {
+      logger.debug('[群聊助手] AI 服务未配置 (缺少 apiKey)')
     }
   }
   return aiService
