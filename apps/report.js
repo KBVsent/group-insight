@@ -36,7 +36,7 @@ export class ReportPlugin extends plugin {
           permission: 'all'
         },
         {
-          reg: '^#强制群聊报告$',
+          reg: '^#强制生成报告$',
           fnc: 'forceGenerateReport',
           permission: 'master'
         }

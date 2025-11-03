@@ -23,7 +23,7 @@ export default class ActivityVisualizer {
     // 生成每个小时的柱状图
     const bars = hourlyCount
       .map((count, hour) => {
-        // 计算高度百分比
+        // 计算高度百分比（基于峰值）
         const heightPercent = peakCount > 0 ? (count / peakCount) * 100 : 0
 
         // 根据活跃度设置颜色
@@ -35,8 +35,8 @@ export default class ActivityVisualizer {
         return `
         <div class="activity-hour ${isPeak ? 'peak' : ''}">
           <div class="activity-bar-container">
-            <div class="activity-bar" style="height: ${heightPercent}%; background: ${color};">
-              <span class="activity-count">${count > 0 ? count : ''}</span>
+            <div class="activity-bar" style="height: ${heightPercent}%; background: ${color}; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              ${count > 0 ? `<span class="activity-count">${count}</span>` : ''}
             </div>
           </div>
           <div class="activity-label">${hour}</div>
@@ -51,7 +51,9 @@ export default class ActivityVisualizer {
         <span class="peak-indicator">峰值: ${peakHour}:00-${(peakHour + 1) % 24}:00 (${peakCount}条)</span>
       </div>
       <div class="activity-chart-container">
-        ${bars}
+        <div class="activity-bars">
+          ${bars}
+        </div>
       </div>
       <div class="activity-legend">
         <div class="legend-item">
@@ -75,6 +77,45 @@ export default class ActivityVisualizer {
   }
 
   /**
+   * 计算Y轴刻度
+   * @param {number} peakCount - 峰值消息数
+   * @returns {Object} 刻度信息 { interval: 刻度间隔, max: 最大值, scales: 刻度数组 }
+   */
+  calculateYAxisScale(peakCount) {
+    if (peakCount === 0) {
+      return { interval: 10, max: 50, scales: [0, 10, 20, 30, 40, 50] }
+    }
+
+    // 根据峰值选择合适的刻度间隔
+    let interval
+    if (peakCount <= 20) {
+      interval = 5
+    } else if (peakCount <= 50) {
+      interval = 10
+    } else if (peakCount <= 100) {
+      interval = 20
+    } else if (peakCount <= 200) {
+      interval = 50
+    } else if (peakCount <= 500) {
+      interval = 100
+    } else {
+      // 对于更大的值，向上取整到100的倍数
+      interval = Math.ceil(peakCount / 5 / 100) * 100
+    }
+
+    // 计算最大刻度（向上取整到刻度间隔的倍数）
+    const max = Math.ceil(peakCount / interval) * interval
+
+    // 生成刻度数组
+    const scales = []
+    for (let i = 0; i <= max; i += interval) {
+      scales.push(i)
+    }
+
+    return { interval, max, scales }
+  }
+
+  /**
    * 根据活跃度计算颜色
    * @param {number} count - 当前小时消息数
    * @param {number} peakCount - 峰值消息数
@@ -86,13 +127,13 @@ export default class ActivityVisualizer {
     const ratio = count / peakCount
 
     if (ratio >= 0.7) {
-      // 高活跃: 红色渐变
+      // 高活跃: 红色
       return '#ef4444'
     } else if (ratio >= 0.4) {
-      // 中活跃: 橙色渐变
+      // 中活跃: 橙色
       return '#f59e0b'
     } else {
-      // 低活跃: 绿色渐变
+      // 低活跃: 绿色
       return '#10b981'
     }
   }
