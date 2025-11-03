@@ -14,8 +14,10 @@ import Config from './Config.js'
 
 // 单例服务实例
 let messageCollector = null
+let messageCollectorInitialized = false
 let wordCloudGenerator = null
 let aiService = null
+let aiServiceInitialized = false
 let statisticsService = null
 let activityVisualizer = null
 let topicAnalyzer = null
@@ -26,12 +28,13 @@ let userTitleAnalyzer = null
  * 获取消息收集器实例
  */
 export function getMessageCollector() {
-  if (!messageCollector) {
+  if (!messageCollectorInitialized) {
+    messageCollectorInitialized = true
     const config = Config.get()
     if (config?.messageCollection?.enabled !== false) {
       messageCollector = new MessageCollector(config)
       messageCollector.startCollecting()
-      logger.info('[群聊洞见] 消息收集器已启动')
+      // 日志由 startCollecting() 内部打印,这里不需要重复
     }
   }
   return messageCollector
@@ -52,11 +55,12 @@ export function getWordCloudGenerator() {
  * 获取 AI 服务实例
  */
 export function getAIService() {
-  if (!aiService) {
+  if (!aiServiceInitialized) {
+    aiServiceInitialized = true
     const config = Config.get()
     // AI 服务是否启用：检查是否配置了 apiKey
     const aiConfig = config?.ai
-    const isAIEnabled = aiConfig && aiConfig.apiKey
+    const isAIEnabled = aiConfig && aiConfig.apiKey && aiConfig.apiKey.trim() !== ''
 
     if (isAIEnabled) {
       try {
@@ -72,7 +76,7 @@ export function getAIService() {
         aiService = null
       }
     } else {
-      logger.debug('[群聊洞见] AI 服务未配置 (缺少 apiKey)')
+      logger.info('[群聊洞见] AI 服务未启用 (未配置 API Key)，AI 相关功能将不可用')
     }
   }
   return aiService
@@ -195,8 +199,10 @@ export async function reinitializeServices(newConfig) {
   }
 
   // 重置所有服务
+  messageCollectorInitialized = false
   wordCloudGenerator = null
   aiService = null
+  aiServiceInitialized = false
   statisticsService = null
   activityVisualizer = null
   topicAnalyzer = null
@@ -221,8 +227,10 @@ export function stopAllServices() {
     messageCollector.stopCollecting()
     messageCollector = null
   }
+  messageCollectorInitialized = false
   wordCloudGenerator = null
   aiService = null
+  aiServiceInitialized = false
   statisticsService = null
   activityVisualizer = null
   topicAnalyzer = null

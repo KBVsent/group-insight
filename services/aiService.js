@@ -32,6 +32,7 @@ export default class AIService {
 
     if (!this.apiKey) {
       logger.warn('[群聊洞见] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
+      this.initialized = false
       return false
     }
 
@@ -45,6 +46,7 @@ export default class AIService {
           break
         default:
           logger.error(`[群聊洞见] 不支持的 AI 提供商: ${this.provider}`)
+          this.initialized = false
           return false
       }
 
@@ -53,6 +55,7 @@ export default class AIService {
       return true
     } catch (err) {
       logger.error(`[群聊洞见] AI 服务初始化失败: ${err}`)
+      this.initialized = false
       return false
     }
   }
