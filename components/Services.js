@@ -62,7 +62,11 @@ export function getAIService() {
       try {
         // 传递 AI 配置对象（不是整个 config）
         aiService = new AIService(aiConfig)
-        logger.info(`[群聊助手] AI 服务已初始化 (${aiConfig.provider || 'claude'})`)
+        // 立即初始化，避免并发调用时的竞态条件
+        aiService.init().catch(err => {
+          logger.warn('[群聊助手] AI 服务初始化失败:', err.message)
+          aiService = null
+        })
       } catch (err) {
         logger.warn('[群聊助手] AI 服务初始化失败:', err.message)
         aiService = null
