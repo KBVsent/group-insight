@@ -86,12 +86,23 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
       return { goldenQuotes: [], usage: result.usage || null }
     }
 
-    // 验证和清理数据
+    // 创建昵称到 user_id 的映射表
+    const nicknameToUserId = new Map()
+    if (stats && stats.users) {
+      for (const user of stats.users) {
+        nicknameToUserId.set(user.nickname, user.user_id)
+      }
+    }
+
+    // 验证和清理数据，同时添加 user_id
     const validQuotes = quotes
       .filter(quote => quote && quote.quote && quote.sender && quote.reason)
       .map(quote => ({
         quote: quote.quote.trim(),
-        sender: quote.sender.trim(),
+        sender: {
+          nickname: quote.sender.trim(),
+          user_id: nicknameToUserId.get(quote.sender.trim()) || null
+        },
         reason: quote.reason.trim()
       }))
       .slice(0, this.maxQuotes)

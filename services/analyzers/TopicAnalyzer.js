@@ -49,13 +49,24 @@ export default class TopicAnalyzer extends BaseAnalyzer {
       return { topics: [], usage: result.usage || null }
     }
 
-    // 验证和清理数据
+    // 创建昵称到 user_id 的映射表
+    const nicknameToUserId = new Map()
+    if (stats && stats.users) {
+      for (const user of stats.users) {
+        nicknameToUserId.set(user.nickname, user.user_id)
+      }
+    }
+
+    // 验证和清理数据，同时添加 user_id
     const validTopics = topics
       .filter(topic => topic && topic.topic && topic.detail)
       .map(topic => ({
         topic: topic.topic.trim(),
         contributors: Array.isArray(topic.contributors)
-          ? topic.contributors.slice(0, 5)
+          ? topic.contributors.slice(0, 5).map(nickname => ({
+              nickname: nickname.trim(),
+              user_id: nicknameToUserId.get(nickname.trim()) || null
+            }))
           : [],
         detail: topic.detail.trim()
       }))

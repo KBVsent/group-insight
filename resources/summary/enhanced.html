@@ -363,6 +363,41 @@
       line-height: 1.5;
     }
 
+    /* 用户胶囊组件 (inline avatar + name) */
+    .user-capsule {
+      display: inline-flex;
+      align-items: center;
+      background: #f3f4f6;
+      border-radius: 12px;
+      padding: 2px 8px 2px 2px;
+      margin: 0 4px;
+      font-size: inherit;
+      line-height: inherit;
+      vertical-align: middle;
+      white-space: nowrap;
+      transition: background 0.2s ease;
+    }
+
+    .user-capsule:hover {
+      background: #e5e7eb;
+    }
+
+    .user-capsule-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      margin-right: 6px;
+      object-fit: cover;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .user-capsule-name {
+      color: #374151;
+      font-weight: 500;
+    }
+
     /* 金句卡片 */
     .quote-card {
       background: #fffbeb;
@@ -568,7 +603,18 @@
           <div class="topic-title">{{index + 1}}. {{topic.topic}}</div>
           {{if topic.contributors && topic.contributors.length > 0}}
           <div class="topic-contributors">
-            <i class="fas fa-user-group"></i> 主要参与者: {{topic.contributors.join('、')}}
+            <i class="fas fa-user-group"></i> 主要参与者:
+            {{each topic.contributors contributor contributorIndex}}
+              {{if contributorIndex > 0}}、{{/if}}
+              {{if contributor.user_id}}
+              <span class="user-capsule">
+                <img class="user-capsule-avatar" src="https://q1.qlogo.cn/g?b=qq&nk={{contributor.user_id}}&s=100" alt="{{contributor.nickname}}" onerror="this.style.display='none'">
+                <span class="user-capsule-name">{{contributor.nickname}}</span>
+              </span>
+              {{else}}
+              <span>{{contributor.nickname}}</span>
+              {{/if}}
+            {{/each}}
           </div>
           {{/if}}
           <div class="topic-detail">{{topic.detail}}</div>
@@ -605,7 +651,17 @@
         <div class="quote-card">
           <div class="quote-text">{{quote.quote}}</div>
           <div class="quote-footer">
-            <div class="quote-sender"><i class="fas fa-user-tag"></i> {{quote.sender}}</div>
+            <div class="quote-sender">
+              <i class="fas fa-user-tag"></i>
+              {{if quote.sender.user_id}}
+              <span class="user-capsule">
+                <img class="user-capsule-avatar" src="https://q1.qlogo.cn/g?b=qq&nk={{quote.sender.user_id}}&s=100" alt="{{quote.sender.nickname}}" onerror="this.style.display='none'">
+                <span class="user-capsule-name">{{quote.sender.nickname}}</span>
+              </span>
+              {{else}}
+              <span>{{quote.sender.nickname}}</span>
+              {{/if}}
+            </div>
             <div class="quote-reason">{{quote.reason}}</div>
           </div>
         </div>
