@@ -43,10 +43,10 @@ export class ReportPlugin extends plugin {
       ]
     })
 
-    // ✅ 定时任务：每小时执行（MUST use arrow function）
+    // ✅ 定时任务：每天23:59执行
     this.task = {
-      name: '每小时群聊报告',
-      cron: '0 * * * *',
+      name: '每日群聊报告',
+      cron: '59 23 * * *',
       fnc: () => this.scheduledReport(),
       log: true
     }
@@ -105,7 +105,83 @@ export class ReportPlugin extends plugin {
   }
 
   /**
-   * 定时任务：每小时生成群聊报告（带并发控制）
+   * 检查群聊报告生成冷却状态
+   * @param {string} groupId - 群号
+   * @param {boolean} ignoreCooldown - 是否忽略冷却限制（主人/定时任务使用）
+   * @returns {Object} { inCooldown, remainingMinutes, lastGenerated }
+   */
+  async checkCooldown(groupId, ignoreCooldown = false) {
+    if (ignoreCooldown) {
+      return { inCooldown: false, remainingMinutes: 0, lastGenerated: null }
+    }
+
+    try {
+      const config = Config.get()
+      const cooldownMinutes = config?.schedule?.cooldownMinutes || 60
+      const today = moment().format('YYYY-MM-DD')
+      const cooldownKey = `Yz:groupManager:cooldown:${groupId}:${today}`
+
+      // 检查 Redis 中的冷却记录
+      const cooldownData = await redis.hGetAll(cooldownKey)
+
+      if (!cooldownData || !cooldownData.generatedAt) {
+        return { inCooldown: false, remainingMinutes: 0, lastGenerated: null }
+      }
+
+      const generatedAt = parseInt(cooldownData.generatedAt)
+      const now = Date.now()
+      const elapsedMinutes = Math.floor((now - generatedAt) / 1000 / 60)
+      const remainingMinutes = cooldownMinutes - elapsedMinutes
+
+      if (remainingMinutes > 0) {
+        return {
+          inCooldown: true,
+          remainingMinutes,
+          lastGenerated: {
+            timestamp: generatedAt,
+            generatedBy: cooldownData.generatedBy || 'user',
+            messageCount: parseInt(cooldownData.messageCount || 0),
+            elapsedMinutes
+          }
+        }
+      }
+
+      return { inCooldown: false, remainingMinutes: 0, lastGenerated: null }
+    } catch (err) {
+      logger.error(`[群聊洞见-报告] 检查冷却状态失败: ${err}`)
+      // 发生错误时允许生成（避免阻塞用户）
+      return { inCooldown: false, remainingMinutes: 0, lastGenerated: null }
+    }
+  }
+
+  /**
+   * 设置群聊报告生成冷却
+   * @param {string} groupId - 群号
+   * @param {string} generatedBy - 生成来源 ('user' | 'scheduled' | 'master')
+   * @param {number} messageCount - 消息数量
+   */
+  async setCooldown(groupId, generatedBy = 'user', messageCount = 0) {
+    try {
+      const today = moment().format('YYYY-MM-DD')
+      const cooldownKey = `Yz:groupManager:cooldown:${groupId}:${today}`
+
+      await redis.hSet(cooldownKey, {
+        generatedAt: Date.now().toString(),
+        generatedBy,
+        messageCount: messageCount.toString()
+      })
+
+      // 设置过期时间为24小时（跨日自动清理）
+      await redis.expire(cooldownKey, 86400)
+
+      logger.debug(`[群聊洞见-报告] 已设置冷却标记: 群 ${groupId}, 来源: ${generatedBy}`)
+    } catch (err) {
+      logger.error(`[群聊洞见-报告] 设置冷却标记失败: ${err}`)
+    }
+  }
+
+  /**
+   * 定时任务：每天23:59生成群聊报告（带并发控制）
    */
   async scheduledReport() {
     const messageCollector = getMessageCollector()
@@ -175,6 +251,9 @@ export class ReportPlugin extends plugin {
             tokenUsage: analysisResults.tokenUsage
           })
 
+          // 设置冷却标记（防止定时任务后1小时内频繁手动触发）
+          await this.setCooldown(groupId, 'scheduled', messages.length)
+
           logger.mark(`[群聊洞见-报告] 群 ${groupId} 报告生成成功 (${messages.length} 条消息)`)
           return { groupId, status: 'success', messageCount: messages.length }
         } catch (err) {
@@ -222,7 +301,7 @@ export class ReportPlugin extends plugin {
   }
 
   /**
-   * 查询群聊报告
+   * 查询/生成群聊报告
    */
   async generateReport(e) {
     const messageCollector = getMessageCollector()
@@ -237,87 +316,192 @@ export class ReportPlugin extends plugin {
       const match = e.msg.match(/(今天|昨天|前天|(\d{4}-\d{2}-\d{2}))/)
       let queryDate = moment().format('YYYY-MM-DD')
       let dateLabel = '今天'
+      let isToday = true
 
       if (match) {
         if (match[1] === '昨天') {
           queryDate = moment().subtract(1, 'days').format('YYYY-MM-DD')
           dateLabel = '昨天'
+          isToday = false
         } else if (match[1] === '前天') {
           queryDate = moment().subtract(2, 'days').format('YYYY-MM-DD')
           dateLabel = '前天'
+          isToday = false
         } else if (match[2]) {
           const date = moment(match[2], 'YYYY-MM-DD', true)
           if (date.isValid()) {
             queryDate = date.format('YYYY-MM-DD')
             dateLabel = moment(queryDate).format('YYYY年MM月DD日')
+            isToday = queryDate === moment().format('YYYY-MM-DD')
           } else {
             return this.reply('日期格式错误，请使用：YYYY-MM-DD（如 2024-11-01）', true)
           }
         } else if (match[1] === '今天') {
           dateLabel = '今天'
+          isToday = true
         }
       }
 
       // 从 Redis 获取指定日期的报告
-      const report = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
+      let report = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
 
-      if (!report) {
+      // 如果是查询历史日期且报告不存在，直接提示
+      if (!isToday && !report) {
         return this.reply(`${dateLabel}还没有生成报告`, true)
       }
 
-      logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告`)
+      // 如果是查询今天的报告
+      if (isToday) {
+        // 检查冷却状态
+        const cooldown = await this.checkCooldown(e.group_id, false)
 
-      // 获取群名
-      let groupName = '未知群聊'
-      try {
-        const groupInfo = await e.group.getInfo?.()
-        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-      } catch (err) {
-        groupName = `群${e.group_id}`
+        // 如果在冷却期内，返回缓存的报告
+        if (cooldown.inCooldown && report) {
+          const elapsedMinutes = cooldown.lastGenerated.elapsedMinutes
+          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的今天报告（冷却中，${elapsedMinutes}分钟前已生成）`)
+
+          // 获取群名并渲染报告
+          let groupName = '未知群聊'
+          try {
+            const groupInfo = await e.group.getInfo?.()
+            groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+          } catch (err) {
+            groupName = `群${e.group_id}`
+          }
+
+          const img = await this.renderReport(report, {
+            groupName,
+            provider: aiService?.provider || 'AI',
+            model: aiService?.model || '',
+            tokenUsage: report.tokenUsage,
+            date: queryDate
+          })
+
+          if (img) {
+            return this.reply(img)
+          } else {
+            return this.reply('渲染失败', true)
+          }
+        }
+
+        // 不在冷却期或缓存不存在，触发生成
+        if (!cooldown.inCooldown || !report) {
+          await this.reply('正在生成今天的群聊报告，请稍候...')
+
+          // 获取今天的消息
+          const messages = await messageCollector.getMessages(e.group_id, 1)
+
+          if (messages.length === 0) {
+            return this.reply('今天还没有消息，无法生成报告', true)
+          }
+
+          // 获取群名
+          let groupName = '未知群聊'
+          try {
+            const groupInfo = await e.group.getInfo?.()
+            groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+          } catch (err) {
+            groupName = `群${e.group_id}`
+          }
+
+          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
+
+          // 执行分析
+          const analysisResults = await this.performAnalysis(messages, 1)
+
+          if (!analysisResults) {
+            return this.reply('分析失败，请查看日志', true)
+          }
+
+          // 保存报告到 Redis
+          await messageCollector.redisHelper.saveReport(e.group_id, queryDate, {
+            stats: analysisResults.stats,
+            topics: analysisResults.topics,
+            goldenQuotes: analysisResults.goldenQuotes,
+            userTitles: analysisResults.userTitles,
+            messageCount: messages.length,
+            tokenUsage: analysisResults.tokenUsage
+          })
+
+          // 设置冷却
+          await this.setCooldown(e.group_id, 'user', messages.length)
+
+          logger.mark(`[群聊洞见-报告] 用户触发报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+
+          // 渲染并发送报告
+          const savedReport = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
+          const img = await this.renderReport(savedReport || analysisResults, {
+            groupName,
+            provider: aiService?.provider || 'AI',
+            model: aiService?.model || '',
+            tokenUsage: (savedReport || analysisResults).tokenUsage,
+            date: queryDate
+          })
+
+          if (img) {
+            return this.reply(img)
+          } else {
+            return this.reply('报告已生成并保存，但渲染失败', true)
+          }
+        }
       }
 
-      // 渲染报告
-      const img = await this.renderReport(report, {
-        groupName,
-        provider: aiService?.provider || 'AI',
-        model: aiService?.model || '',
-        tokenUsage: report.tokenUsage,
-        date: queryDate
-      })
+      // 历史报告存在，直接渲染返回
+      if (report) {
+        logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告`)
 
-      if (img) {
-        return this.reply(img)
-      } else {
-        // 渲染失败，发送文本总结
-        let textSummary = `📊 ${dateLabel}群聊报告\n\n`
-        textSummary += `消息总数: ${report.stats?.basic?.totalMessages || report.messageCount}\n`
-        textSummary += `参与人数: ${report.stats?.basic?.totalUsers || 0}\n`
-        textSummary += `日期: ${queryDate}\n\n`
-
-        if (report.topics && report.topics.length > 0) {
-          textSummary += `💬 热门话题:\n`
-          report.topics.forEach((topic, i) => {
-            textSummary += `${i + 1}. ${topic.topic}\n`
-          })
-          textSummary += `\n`
+        // 获取群名
+        let groupName = '未知群聊'
+        try {
+          const groupInfo = await e.group.getInfo?.()
+          groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+        } catch (err) {
+          groupName = `群${e.group_id}`
         }
 
-        if (report.userTitles && report.userTitles.length > 0) {
-          textSummary += `🏆 群友称号:\n`
-          report.userTitles.forEach((title) => {
-            textSummary += `• ${title.user} - ${title.title} (${title.mbti})\n`
-          })
-          textSummary += `\n`
-        }
+        // 渲染报告
+        const img = await this.renderReport(report, {
+          groupName,
+          provider: aiService?.provider || 'AI',
+          model: aiService?.model || '',
+          tokenUsage: report.tokenUsage,
+          date: queryDate
+        })
 
-        if (report.goldenQuotes && report.goldenQuotes.length > 0) {
-          textSummary += `💎 群圣经:\n`
-          report.goldenQuotes.forEach((quote, i) => {
-            textSummary += `${i + 1}. "${quote.quote}" —— ${quote.sender}\n`
-          })
-        }
+        if (img) {
+          return this.reply(img)
+        } else {
+          // 渲染失败，发送文本总结
+          let textSummary = `📊 ${dateLabel}群聊报告\n\n`
+          textSummary += `消息总数: ${report.stats?.basic?.totalMessages || report.messageCount}\n`
+          textSummary += `参与人数: ${report.stats?.basic?.totalUsers || 0}\n`
+          textSummary += `日期: ${queryDate}\n\n`
 
-        return this.reply(textSummary, true)
+          if (report.topics && report.topics.length > 0) {
+            textSummary += `💬 热门话题:\n`
+            report.topics.forEach((topic, i) => {
+              textSummary += `${i + 1}. ${topic.topic}\n`
+            })
+            textSummary += `\n`
+          }
+
+          if (report.userTitles && report.userTitles.length > 0) {
+            textSummary += `🏆 群友称号:\n`
+            report.userTitles.forEach((title) => {
+              textSummary += `• ${title.user} - ${title.title} (${title.mbti})\n`
+            })
+            textSummary += `\n`
+          }
+
+          if (report.goldenQuotes && report.goldenQuotes.length > 0) {
+            textSummary += `💎 群圣经:\n`
+            report.goldenQuotes.forEach((quote, i) => {
+              textSummary += `${i + 1}. "${quote.quote}" —— ${quote.sender}\n`
+            })
+          }
+
+          return this.reply(textSummary, true)
+        }
       }
     } catch (err) {
       logger.error(`[群聊洞见-报告] 查询报告错误: ${err}`)
@@ -375,14 +559,18 @@ export class ReportPlugin extends plugin {
         tokenUsage: analysisResults.tokenUsage
       })
 
+      // 设置冷却标记（主人下次触发依然会无视冷却）
+      await this.setCooldown(e.group_id, 'master', messages.length)
+
       logger.mark(`[群聊洞见-报告] 主人强制生成报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
       // 渲染并发送报告
-      const img = await this.renderReport(analysisResults, {
+      const savedReport = await messageCollector.redisHelper.getReport(e.group_id, today)
+      const img = await this.renderReport(savedReport || analysisResults, {
         groupName,
         provider: aiService?.provider || 'AI',
         model: aiService?.model || '',
-        tokenUsage: analysisResults.tokenUsage,
+        tokenUsage: (savedReport || analysisResults).tokenUsage,
         date: today
       })
 
@@ -561,8 +749,8 @@ export class ReportPlugin extends plugin {
         // 传统总结 (如果有)
         summaryHtml: options.summaryHtml || '',
 
-        // 元数据
-        createTime: moment().format('YYYY-MM-DD HH:mm:ss'),
+        // 元数据 - 使用报告数据中的 savedAt 时间戳
+        createTime: analysisResults.savedAt ? moment(analysisResults.savedAt).format('YYYY-MM-DD HH:mm:ss') : moment().format('YYYY-MM-DD HH:mm:ss'),
         tokenUsage,
 
         pluResPath: join(pluginRoot, 'resources') + '/'

@@ -68,7 +68,7 @@ export class AtMePlugin extends plugin {
           const contextMsgContent = []
 
           // 添加灰色标注
-          contextMsgContent.push('💬 之前说: ')
+          contextMsgContent.push('💬 [前文]: ')
 
           // 添加上下文消息文本
           if (ctxMsg.message) {
@@ -105,7 +105,7 @@ export class AtMePlugin extends plugin {
           msgList.push({
             message: contextMsgContent,
             user_id: record.user_id,
-            nickname: `${record.nickname} (上下文)`,
+            nickname: `${record.nickname} [前文]`,
             time: ctxMsg.time
           })
         }
@@ -169,7 +169,7 @@ export class AtMePlugin extends plugin {
           const nextMsgContent = []
 
           // 添加标注
-          nextMsgContent.push('💬 之后说: ')
+          nextMsgContent.push('💬 [后文]: ')
 
           // 添加下一条消息文本
           if (nextMsg.message) {
@@ -206,7 +206,7 @@ export class AtMePlugin extends plugin {
           msgList.push({
             message: nextMsgContent,
             user_id: record.user_id,
-            nickname: `${record.nickname} (之后)`,
+            nickname: `${record.nickname} [后文]`,
             time: nextMsg.time
           })
         }

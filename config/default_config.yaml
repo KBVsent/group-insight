@@ -146,8 +146,13 @@ groupManager:
     # 并发数（同时处理的群数量）
     concurrency: 3
 
-    # 注意：定时任务固定为每小时整点执行 (cron: '0 * * * *')
-    # 如需修改执行时间，请直接编辑 index.js 中的 this.task.cron
+    # 冷却时长（分钟）- 防止频繁生成报告
+    # 普通用户触发后该群将进入冷却期，冷却期内再次触发将返回缓存的报告
+    # 主人和定时任务不受此限制
+    cooldownMinutes: 60
+
+    # 注意：定时任务已修改为每天23:59执行 (cron: '59 23 * * *')
+    # 如需修改执行时间，请直接编辑 apps/report.js 中的 this.task.cron
 
   # 总结功能配置
   summary:
