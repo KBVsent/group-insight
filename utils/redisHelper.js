@@ -23,12 +23,30 @@ export default class RedisHelper {
   }
 
   /**
-   * 获取艾特记录键名
+   * 获取艾特记录索引键名 (Sorted Set)
    * @param {string} groupId - 群号
    * @param {string} userId - 用户ID
    */
-  getAtKey(groupId, userId) {
-    return `${this.keyPrefix}:at:${groupId}_${userId}`
+  getAtIndexKey(groupId, userId) {
+    return `${this.keyPrefix}:at:index:${groupId}_${userId}`
+  }
+
+  /**
+   * 获取艾特记录数据键名 (Hash)
+   * @param {string} recordId - 记录ID
+   */
+  getAtDataKey(recordId) {
+    return `${this.keyPrefix}:at:data:${recordId}`
+  }
+
+  /**
+   * 生成艾特记录ID
+   * @param {string} groupId - 群号
+   * @param {string} userId - 用户ID
+   * @param {number} time - 时间戳(秒)
+   */
+  generateAtRecordId(groupId, userId, time) {
+    return `${groupId}_${userId}_${time}`
   }
 
   /**
@@ -80,46 +98,58 @@ export default class RedisHelper {
 
   /**
    * 保存艾特记录
-   * 使用简单的 GET-SET 方式，配合 Redis 单线程特性保证基本一致性
+   * 使用 Sorted Set + Hash 实现精确过期
    * @param {string} groupId - 群号
    * @param {string} userId - 被艾特的用户ID
    * @param {object} atData - 艾特数据
    */
   async saveAtRecord(groupId, userId, atData) {
-    const key = this.getAtKey(groupId, userId)
+    // 生成唯一记录ID
+    const recordId = this.generateAtRecordId(groupId, userId, atData.time)
+    const indexKey = this.getAtIndexKey(groupId, userId)
+    const dataKey = this.getAtDataKey(recordId)
 
     // 计算过期时间
-    const expireTime = moment().add(this.atRetentionHours, 'hours').format('YYYY-MM-DD HH:mm:ss')
-    const expireSeconds = Math.floor((new Date(expireTime) - new Date()) / 1000)
+    const expireTime = moment.unix(atData.time).add(this.atRetentionHours, 'hours').format('YYYY-MM-DD HH:mm:ss')
+    const expireSeconds = Math.floor((moment(expireTime).valueOf() - Date.now()) / 1000)
 
-    // 添加过期时间到数据中
-    atData.endTime = expireTime
+    // 如果已经过期，不保存
+    if (expireSeconds <= 0) {
+      logger.debug(`[群聊助手] 艾特记录已过期，跳过保存: ${recordId}`)
+      return
+    }
 
     try {
-      // 获取现有数据
-      const data = await redis.get(key)
-      let records = []
+      // 1. 将记录ID添加到索引 (Sorted Set)
+      // Score: 消息时间戳(秒)，Member: 记录ID
+      await redis.zAdd(indexKey, { score: atData.time, value: recordId })
 
-      if (data) {
-        try {
-          records = JSON.parse(data)
-          // 确保是数组
-          if (!Array.isArray(records)) {
-            records = []
-          }
-        } catch (parseErr) {
-          logger.error(`[群聊助手] 解析艾特记录失败: ${parseErr}，将重置记录`)
-          records = []
-        }
+      // 2. 保存记录详情到 Hash
+      const hashData = {
+        user_id: String(atData.user_id),
+        nickname: atData.nickname,
+        message: atData.message,
+        images: JSON.stringify(atData.images || []),
+        faces: JSON.stringify(atData.faces || {}),
+        time: String(atData.time),
+        messageId: atData.messageId || '',
+        endTime: expireTime
       }
 
-      // 添加新记录
-      records.push(atData)
+      for (const [field, value] of Object.entries(hashData)) {
+        await redis.hSet(dataKey, field, value)
+      }
 
-      // 保存回 Redis
-      await redis.set(key, JSON.stringify(records), { EX: expireSeconds })
+      // 3. 设置数据键过期时间（基于消息发送时间）
+      await redis.expire(dataKey, expireSeconds)
 
-      logger.debug(`[群聊助手] 保存艾特记录成功，当前记录数: ${records.length}`)
+      // 4. 设置索引键过期时间（比数据键长1小时，兜底清理）
+      const indexTTL = await redis.ttl(indexKey)
+      if (indexTTL === -1 || indexTTL < expireSeconds) {
+        await redis.expire(indexKey, expireSeconds + 3600)
+      }
+
+      logger.debug(`[群聊助手] 保存艾特记录成功: ${recordId}，过期时间: ${expireTime}`)
     } catch (err) {
       logger.error(`[群聊助手] 保存艾特记录失败: ${err}`)
     }
@@ -131,13 +161,54 @@ export default class RedisHelper {
    * @param {string} userId - 用户ID
    */
   async getAtRecords(groupId, userId) {
-    const key = this.getAtKey(groupId, userId)
-    const data = await redis.get(key)
-
-    if (!data) return null
+    const indexKey = this.getAtIndexKey(groupId, userId)
 
     try {
-      return JSON.parse(data)
+      // 计算24小时前的时间戳
+      const cutoffTime = moment().subtract(this.atRetentionHours, 'hours').unix()
+
+      // 从 Sorted Set 中查询24小时内的记录ID
+      // ZRANGEBYSCORE: 按 score 范围查询
+      const recordIds = await redis.zRangeByScore(indexKey, cutoffTime, '+inf')
+
+      if (!recordIds || recordIds.length === 0) {
+        return null
+      }
+
+      // 批量获取记录详情
+      const records = []
+      const expiredIds = []
+
+      for (const recordId of recordIds) {
+        const dataKey = this.getAtDataKey(recordId)
+        const hashData = await redis.hGetAll(dataKey)
+
+        // 如果数据已过期（Hash 被删除），记录到清理列表
+        if (!hashData || Object.keys(hashData).length === 0) {
+          expiredIds.push(recordId)
+          continue
+        }
+
+        // 解析数据
+        records.push({
+          user_id: parseInt(hashData.user_id),
+          nickname: hashData.nickname,
+          message: hashData.message,
+          images: JSON.parse(hashData.images || '[]'),
+          faces: JSON.parse(hashData.faces || '{}'),
+          time: parseInt(hashData.time),
+          messageId: hashData.messageId || '',
+          endTime: hashData.endTime
+        })
+      }
+
+      // 清理索引中已过期的记录ID
+      if (expiredIds.length > 0) {
+        await redis.zRem(indexKey, expiredIds)
+        logger.debug(`[群聊助手] 清理过期索引: ${expiredIds.length} 条`)
+      }
+
+      return records.length > 0 ? records : null
     } catch (err) {
       logger.error(`[群聊助手] 获取艾特记录失败: ${err}`)
       return null
@@ -150,24 +221,78 @@ export default class RedisHelper {
    * @param {string} userId - 用户ID
    */
   async clearAtRecords(groupId, userId) {
-    const key = this.getAtKey(groupId, userId)
-    return await redis.del(key)
+    const indexKey = this.getAtIndexKey(groupId, userId)
+
+    try {
+      // 获取所有记录ID
+      const recordIds = await redis.zRange(indexKey, 0, -1)
+
+      // 删除所有数据键
+      for (const recordId of recordIds) {
+        const dataKey = this.getAtDataKey(recordId)
+        await redis.del(dataKey)
+      }
+
+      // 删除索引键
+      await redis.del(indexKey)
+
+      logger.debug(`[群聊助手] 清除艾特记录成功: ${recordIds.length} 条`)
+      return recordIds.length
+    } catch (err) {
+      logger.error(`[群聊助手] 清除艾特记录失败: ${err}`)
+      return 0
+    }
   }
 
   /**
    * 清除所有艾特记录
    */
   async clearAllAtRecords() {
-    const pattern = `${this.keyPrefix}:at:*`
-    const keys = await redis.keys(pattern)
+    try {
+      let totalDeleted = 0
 
-    if (keys.length === 0) return 0
+      // 1. 清除所有索引键和对应的数据键
+      const indexPattern = `${this.keyPrefix}:at:index:*`
+      const indexKeys = await redis.keys(indexPattern)
 
-    for (const key of keys) {
-      await redis.del(key)
+      for (const indexKey of indexKeys) {
+        // 获取所有记录ID
+        const recordIds = await redis.zRange(indexKey, 0, -1)
+
+        // 删除所有数据键
+        for (const recordId of recordIds) {
+          const dataKey = this.getAtDataKey(recordId)
+          await redis.del(dataKey)
+          totalDeleted++
+        }
+
+        // 删除索引键
+        await redis.del(indexKey)
+      }
+
+      // 2. 清除可能残留的旧格式数据键
+      const dataPattern = `${this.keyPrefix}:at:data:*`
+      const dataKeys = await redis.keys(dataPattern)
+      for (const key of dataKeys) {
+        await redis.del(key)
+      }
+
+      // 3. 清除旧版本的艾特记录键（兼容性清理）
+      const oldPattern = `${this.keyPrefix}:at:*`
+      const oldKeys = await redis.keys(oldPattern)
+      const oldAtKeys = oldKeys.filter(key =>
+        !key.includes(':index:') && !key.includes(':data:')
+      )
+      for (const key of oldAtKeys) {
+        await redis.del(key)
+      }
+
+      logger.info(`[群聊助手] 清除所有艾特记录成功: ${totalDeleted} 条`)
+      return totalDeleted
+    } catch (err) {
+      logger.error(`[群聊助手] 清除所有艾特记录失败: ${err}`)
+      return 0
     }
-
-    return keys.length
   }
 
   /**
