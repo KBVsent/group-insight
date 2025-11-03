@@ -18,12 +18,18 @@ export default class AIService {
     this.maxMessages = config.maxMessages || 500
     this.textProcessor = new TextProcessor()
     this.client = null
+    this.initialized = false
   }
 
   /**
    * 初始化 AI 客户端
    */
   async init() {
+    // 避免重复初始化
+    if (this.initialized) {
+      return true
+    }
+
     if (!this.apiKey) {
       logger.warn('[群聊助手] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
       return false
@@ -42,6 +48,7 @@ export default class AIService {
           return false
       }
 
+      this.initialized = true
       logger.info(`[群聊助手] AI 服务初始化成功，提供商: ${this.provider}`)
       return true
     } catch (err) {
