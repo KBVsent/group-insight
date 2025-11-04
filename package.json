@@ -13,7 +13,7 @@
     "AI总结"
   ],
   "dependencies": {
-    "nodejieba": "^2.6.0",
+    "jieba-wasm": "^2.2.0",
     "@anthropic-ai/sdk": "^0.32.1",
     "marked": "^12.0.0",
     "yaml": "^2.4.0"

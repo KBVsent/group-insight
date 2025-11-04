@@ -24,9 +24,14 @@ export default class TextProcessor {
     if (this.initialized) return
 
     try {
-      // 动态导入 nodejieba（需要先安装）
-      const nodejieba = await import('nodejieba')
-      this.jieba = nodejieba.default || nodejieba
+      // 动态导入 jieba-wasm（需要先安装）
+      const jiebaWasm = await import('jieba-wasm')
+      const { cut } = jiebaWasm
+
+      // 创建 API 适配器包装器,确保与原 nodejieba API 兼容
+      this.jieba = {
+        cut: (text) => cut(text, true)  // 第二个参数为 true 启用 HMM 模式,提高分词准确度
+      }
 
       // 加载停用词
       const stopwordsPath = join(__dirname, '../config/stopwords.json')
@@ -35,7 +40,7 @@ export default class TextProcessor {
       this.stopwords = new Set(stopwords)
 
       this.initialized = true
-      logger.info('[群聊洞见] 文本处理器初始化成功')
+      logger.info('[群聊洞见] 文本处理器初始化成功 (jieba-wasm)')
     } catch (err) {
       logger.error(`[群聊洞见] 文本处理器初始化失败: ${err}`)
       logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
@@ -94,7 +99,7 @@ export default class TextProcessor {
 
   /**
    * 简单分词（降级方案）
-   * 当 nodejieba 不可用时使用
+   * 当 jieba-wasm 不可用时使用
    */
   simpleCut(text, minLength = 2) {
     // 提取所有中文词汇
