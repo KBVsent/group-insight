@@ -207,6 +207,7 @@ plugins/group-insight/
 ## 致谢
 
 - [TRSS-Yunzai](https://github.com/TimeRainStarSky/Yunzai) - Bot 框架
+- [astrbot-qq-group-daily-analysis](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis) - 群聊报告部分灵感来源
 
 ## License
 

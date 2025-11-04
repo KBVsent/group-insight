@@ -3,9 +3,6 @@
  * 支持多种 AI 提供商，方便切换
  */
 
-import moment from 'moment'
-import TextProcessor from '../utils/textProcessor.js'
-
 export default class AIService {
   constructor(config) {
     this.config = config || {}
@@ -15,8 +12,6 @@ export default class AIService {
     this.baseURL = config.baseURL
     this.timeout = config.timeout || 60000
     this.maxTokens = config.maxTokens || 2000
-    this.maxMessages = config.maxMessages || 500
-    this.textProcessor = new TextProcessor()
     this.client = null
     this.initialized = false
   }
@@ -102,133 +97,6 @@ export default class AIService {
       logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm add openai')
       throw err
     }
-  }
-
-  /**
-   * 总结群聊消息
-   * @param {array} messages - 消息列表
-   * @param {object} options - 选项
-   * @param {string} options.groupName - 群名
-   * @param {number} options.days - 天数
-   * @param {string} options.previousSummary - 上次总结内容（用作上下文）
-   */
-  async summarize(messages, options = {}) {
-    if (!this.client) {
-      const initialized = await this.init()
-      if (!initialized) {
-        return { success: false, error: 'AI 服务未初始化' }
-      }
-    }
-
-    const {
-      groupName = '未知群聊',
-      days = 1,
-      previousSummary = null
-    } = options
-
-    try {
-      // 格式化消息（使用可配置的消息数量限制）
-      const formattedMessages = this.textProcessor.formatForAI(messages, this.maxMessages)
-
-      if (formattedMessages.length === 0) {
-        return { success: false, error: '没有可总结的消息' }
-      }
-
-      // 构建 Prompt（包含历史总结上下文）
-      const prompt = this.buildPrompt(formattedMessages, groupName, days, previousSummary)
-
-      logger.info(`[群聊洞见] 开始调用 AI 总结，消息数: ${formattedMessages.length}${previousSummary ? '（包含历史总结上下文）' : ''}`)
-
-      // 调用 AI
-      let summary
-      switch (this.provider) {
-        case 'claude':
-          summary = await this.callClaude(prompt)
-          break
-        case 'openai':
-          summary = await this.callOpenAI(prompt)
-          break
-        default:
-          return { success: false, error: '不支持的 AI 提供商' }
-      }
-
-      logger.info('[群聊洞见] AI 总结完成')
-
-      return {
-        success: true,
-        summary,
-        messageCount: formattedMessages.length,
-        provider: this.provider,
-        model: this.model
-      }
-    } catch (err) {
-      logger.error(`[群聊洞见] AI 总结失败: ${err}`)
-      return { success: false, error: err.message }
-    }
-  }
-
-  /**
-   * 构建 Prompt
-   * @param {array} messages - 格式化后的消息
-   * @param {string} groupName - 群名
-   * @param {number} days - 天数
-   * @param {string} previousSummary - 上次总结内容（可选）
-   */
-  buildPrompt(messages, groupName, days, previousSummary = null) {
-    const timeRange = days === 1 ? '今天' : days === 3 ? '最近三天' : '最近七天'
-
-    // 将消息格式化为文本
-    const messagesText = messages
-      .map(msg => {
-        const time = moment(msg.time * 1000).format('HH:mm')
-        return `[${time}] ${msg.user}: ${msg.content}`
-      })
-      .join('\n')
-
-    // 构建历史总结上下文部分
-    let contextSection = ''
-    if (previousSummary) {
-      contextSection = `
-
-之前的总结内容（作为上下文参考）：
-${previousSummary}
-
----
-
-请基于以上历史总结，结合下面的新消息，生成更新后的总结。注意整合新旧信息，保持连贯性。`
-    }
-
-    return `你是一个群聊分析助手。请分析以下群聊消息，并生成一份简洁的总结报告。${contextSection}
-
-群聊信息：
-- 群名：${groupName}
-- 时间范围：${timeRange}
-- 消息数量：${messages.length} 条
-
-群聊消息：
-${messagesText}
-
-请按以下格式输出总结：
-
-# 群聊总结
-
-## 主要话题
-[列出3-5个主要讨论的话题，每个话题用一句话概括]
-
-## 活跃成员
-[列出最活跃的3-5位成员及他们的主要讨论内容]
-
-## 重要事件
-[如果有重要事件、公告或决定，在这里列出]
-
-## 群聊氛围
-[用1-2句话描述群聊的整体氛围]
-
-注意：
-1. 总结要简洁明了，避免冗长
-2. 忽略无意义的闲聊和灌水内容
-3. 关注有价值的讨论和信息
-4. 保持客观中立的语气${previousSummary ? '\n5. 如果之前总结中的话题在新消息中有延续，请更新相关内容' : ''}`
   }
 
   /**
@@ -323,37 +191,5 @@ ${messagesText}
     }
 
     return { content, usage }
-  }
-
-  /**
-   * 调用 Claude API
-   */
-  async callClaude(prompt) {
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: this.maxTokens,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }]
-    })
-
-    return response.content[0].text
-  }
-
-  /**
-   * 调用 OpenAI API
-   */
-  async callOpenAI(prompt) {
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      max_tokens: this.maxTokens,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }]
-    })
-
-    return response.choices[0].message.content
   }
 }

@@ -746,9 +746,6 @@ export class ReportPlugin extends plugin {
         goldenQuotes,
         userTitles,
 
-        // 传统总结 (如果有)
-        summaryHtml: options.summaryHtml || '',
-
         // 元数据 - 使用报告数据中的 savedAt 时间戳
         createTime: analysisResults.savedAt ? moment(analysisResults.savedAt).format('YYYY-MM-DD HH:mm:ss') : moment().format('YYYY-MM-DD HH:mm:ss'),
         tokenUsage,
