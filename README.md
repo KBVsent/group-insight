@@ -207,8 +207,6 @@ plugins/group-insight/
 ## 致谢
 
 - [TRSS-Yunzai](https://github.com/TimeRainStarSky/Yunzai) - Bot 框架
-- [nodejieba](https://github.com/yanyiwu/nodejieba) - 中文分词
-- [Anthropic Claude](https://www.anthropic.com/) - AI 服务
 
 ## License
 

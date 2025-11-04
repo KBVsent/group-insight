@@ -756,9 +756,9 @@ export class ReportPlugin extends plugin {
         pluResPath: join(pluginRoot, 'resources') + '/'
       }
 
-      // 使用增强模板渲染
-      const img = await puppeteer.screenshot('group-insight-enhanced', {
-        tplFile: join(pluginRoot, 'resources/summary/enhanced.html'),
+      // 渲染群聊总结报告
+      const img = await puppeteer.screenshot('group-insight', {
+        tplFile: join(pluginRoot, 'resources/summary/index.html'),
         imgType,
         quality,
         ...templateData
