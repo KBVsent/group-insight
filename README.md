@@ -162,16 +162,6 @@ groupManager:
 
 ## 常见问题
 
-### nodejieba 安装失败
-
-需要 C++ 编译环境:
-
-- **Windows**: 安装 Visual Studio Build Tools
-- **macOS**: `xcode-select --install`
-- **Linux**: `sudo apt-get install build-essential`
-
-失败后插件会自动降级使用简单分词。
-
 ### AI 分析失败
 
 1. 检查 API Key 是否正确
