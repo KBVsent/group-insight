@@ -637,8 +637,11 @@ export class ReportPlugin extends plugin {
 
           logger.info(`[群聊洞见-报告] 消息总数: ${messages.length}, 完整批次: ${completedBatches}, 剩余: ${remainingMessages}`)
 
-          // 获取所有批次的缓存
+          // 获取所有批次的缓存（只使用成功的批次，忽略失败/缺失的）
           const batchCaches = []
+          const failedBatches = []
+          const missingBatches = []
+
           for (let i = 0; i < completedBatches; i++) {
             const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${i}`
             const cachedData = await redis.get(cacheKey)
@@ -650,24 +653,21 @@ export class ReportPlugin extends plugin {
                   batchCaches.push(parsed)
                   logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}`)
                 } else {
-                  logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，将全量分析`)
-                  batchCaches.length = 0 // 清空，回退到全量分析
-                  break
+                  failedBatches.push(i)
+                  logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，跳过此批次`)
                 }
               } catch (err) {
                 logger.error(`[群聊洞见-报告] 批次${i}缓存解析失败: ${err}`)
-                batchCaches.length = 0
-                break
+                failedBatches.push(i)
               }
             } else {
-              logger.warn(`[群聊洞见-报告] 批次${i}缓存不存在，将全量分析`)
-              batchCaches.length = 0
-              break
+              missingBatches.push(i)
+              logger.info(`[群聊洞见-报告] 批次${i}缓存不存在，跳过此批次`)
             }
           }
 
-          // 如果所有批次缓存都有效，则使用增量分析
-          if (batchCaches.length === completedBatches && completedBatches > 0) {
+          // 如果有任何成功的批次缓存，就使用增量分析
+          if (batchCaches.length > 0) {
             useIncrementalAnalysis = true
 
             // 合并所有批次的结果
@@ -679,7 +679,12 @@ export class ReportPlugin extends plugin {
               mergedQuotes = this.mergeGoldenQuotes(mergedQuotes, batch.goldenQuotes || [])
             }
 
-            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}`)
+            const skippedInfo = []
+            if (failedBatches.length > 0) skippedInfo.push(`失败: ${failedBatches.join(',')}`)
+            if (missingBatches.length > 0) skippedInfo.push(`缺失: ${missingBatches.join(',')}`)
+            const skippedText = skippedInfo.length > 0 ? ` (跳过批次 ${skippedInfo.join(', ')})` : ''
+
+            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}${skippedText}`)
 
             // 如果有剩余消息，分析增量部分
             if (remainingMessages > 0) {
