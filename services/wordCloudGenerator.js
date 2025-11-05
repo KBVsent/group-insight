@@ -58,8 +58,35 @@ export default class WordCloudGenerator {
 
       logger.info(`[群聊洞见] 统计到 ${wordCount.length} 个词汇`)
 
-      // 准备词云数据（wordcloud2.js 格式：[词, 权重]）
-      const wordList = wordCount.map(item => [item.word, item.count])
+      // 归一化词频到固定范围 (1-10)，确保词云大小可控
+      const frequencies = wordCount.map(item => item.count)
+      const maxFreq = Math.max(...frequencies)
+      const minFreq = Math.min(...frequencies)
+      const freqRange = maxFreq - minFreq
+
+      logger.info(`[群聊洞见] 频率范围: ${minFreq} - ${maxFreq}`)
+
+      // 准备词云数据（wordcloud2.js 格式：[词, 相对倍率]）
+      // 使用对数缩放将真实频率映射到 1-10 范围
+      const wordList = wordCount.map(item => {
+        let normalizedWeight
+        if (freqRange === 0) {
+          // 所有词频率相同，使用固定权重
+          normalizedWeight = 5
+        } else {
+          // 对数缩放: log(freq) 映射到 1-10
+          // 使用自然对数压缩差异，让高频词和低频词的大小差异更合理
+          const logFreq = Math.log(item.count)
+          const logMin = Math.log(minFreq)
+          const logMax = Math.log(maxFreq)
+          const logRange = logMax - logMin
+
+          // 映射到 1-10 范围
+          normalizedWeight = 1 + ((logFreq - logMin) / logRange) * 9
+        }
+
+        return [item.word, normalizedWeight]
+      })
 
       // 准备模板数据
       const pluginPath = join(__dirname, '..')

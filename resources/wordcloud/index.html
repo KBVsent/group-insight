@@ -42,40 +42,45 @@
     // 动态计算词云参数，确保所有词都能显示
     const wordCount = wordList.length;
 
-    // 根据词语数量动态调整参数，确保词语既能显示又足够大
-    // 词少时：增大字体，但允许自适应缩放以确保显示
-    // 词多时：减小字体，提高密度
-    let gridSize, weightFactor, minSize;
+    console.log('[词云调试] 词汇数:', wordCount, '| 权重范围:',
+      Math.min(...wordList.map(w => w[1])).toFixed(2), '-',
+      Math.max(...wordList.map(w => w[1])).toFixed(2));
+
+    // 根据词语数量动态调整参数
+    // 词云数据已经归一化到 1-10 范围，这里只需设置基础字体大小
+    let gridSize, baseFontSize, minSize;
 
     if (wordCount < 20) {
-      // 极少词汇：大字体 + 低密度 + 允许缩放
+      // 极少词汇：大字体 + 低密度
       gridSize = 12;
-      weightFactor = canvas.width / 80;
+      baseFontSize = canvas.width / 25;  // 基础字体
       minSize = Math.max(24, canvas.width / 30);
     } else if (wordCount < 50) {
       // 较少词汇：中等字体 + 中等密度
       gridSize = 10;
-      weightFactor = canvas.width / 100;
+      baseFontSize = canvas.width / 30;
       minSize = Math.max(20, canvas.width / 35);
     } else if (wordCount < 100) {
       // 中等词汇：标准参数
       gridSize = 8;
-      weightFactor = canvas.width / 120;
+      baseFontSize = canvas.width / 35;
       minSize = Math.max(16, canvas.width / 40);
     } else {
       // 大量词汇：小字体 + 高密度
       gridSize = 6;
-      weightFactor = canvas.width / 150;
+      baseFontSize = canvas.width / 45;
       minSize = Math.max(12, canvas.width / 50);
     }
 
-    // 配置词云 - 修复后的参数确保词语能够显示
+    // 配置词云 - 使用归一化权重 (1-10)，字体大小完全可控
     WordCloud(canvas, {
       list: wordList,
       gridSize: gridSize,
-      weightFactor: function (size) {
-        // 使用线性缩放，避免过大的指数增长
-        return size * weightFactor;
+      weightFactor: function (normalizedWeight) {
+        // 归一化权重已经在 1-10 范围内
+        // 直接使用线性映射: fontSize = baseFontSize * normalizedWeight
+        // 最小字体 = baseFontSize * 1，最大字体 = baseFontSize * 10
+        return baseFontSize * normalizedWeight;
       },
       fontFamily: 'Microsoft YaHei, PingFang SC, SimHei, sans-serif',
       fontWeight: '600',
