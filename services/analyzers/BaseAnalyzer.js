@@ -107,15 +107,22 @@ export default class BaseAnalyzer {
       includeTime = true,
       includeNickname = true,
       maxLength = null,
+      maxMessages = null,  // 新增：按消息数量限制
       filter = null
     } = options
 
     let formatted = []
+    let processedCount = 0
 
     for (const msg of messages) {
       // 应用过滤器
       if (filter && !filter(msg)) {
         continue
+      }
+
+      // 检查消息数量限制（优先于字符长度限制）
+      if (maxMessages && processedCount >= maxMessages) {
+        break
       }
 
       let line = ''
@@ -136,10 +143,12 @@ export default class BaseAnalyzer {
       line += msg.message
 
       formatted.push(line)
+      processedCount++
 
-      // 检查长度限制
+      // 检查字符长度限制（作为兜底）
       if (maxLength && formatted.join('\n').length > maxLength) {
         formatted.pop()  // 移除最后一条,避免超长
+        logger.warn(`[BaseAnalyzer] 达到字符长度限制 ${maxLength}，实际处理 ${processedCount - 1} 条消息`)
         break
       }
     }

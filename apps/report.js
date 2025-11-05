@@ -233,7 +233,7 @@ export class ReportPlugin extends plugin {
 
           // 执行分析
           logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成报告 (消息数: ${messages.length})`)
-          const analysisResults = await this.performAnalysis(messages, 1)
+          const analysisResults = await this.performAnalysis(messages, 1, groupId, today)
 
           if (!analysisResults) {
             logger.warn(`[群聊洞见-报告] 群 ${groupId} 报告生成失败：分析失败`)
@@ -407,7 +407,7 @@ export class ReportPlugin extends plugin {
           logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
 
           // 执行分析
-          const analysisResults = await this.performAnalysis(messages, 1)
+          const analysisResults = await this.performAnalysis(messages, 1, e.group_id, queryDate)
 
           if (!analysisResults) {
             return this.reply('分析失败，请查看日志', true)
@@ -542,14 +542,14 @@ export class ReportPlugin extends plugin {
       logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
 
       // 执行分析
-      const analysisResults = await this.performAnalysis(messages, 1)
+      const today = moment().format('YYYY-MM-DD')
+      const analysisResults = await this.performAnalysis(messages, 1, e.group_id, today)
 
       if (!analysisResults) {
         return this.reply('分析失败，请查看日志', true)
       }
 
       // 保存报告到 Redis（覆盖已有报告）
-      const today = moment().format('YYYY-MM-DD')
       await messageCollector.redisHelper.saveReport(e.group_id, today, {
         stats: analysisResults.stats,
         topics: analysisResults.topics,
@@ -587,18 +587,24 @@ export class ReportPlugin extends plugin {
 
   /**
    * 执行分析
+   * @param {Array} messages - 消息数组
+   * @param {number} days - 分析天数
+   * @param {string} groupId - 群号（用于增量分析）
+   * @param {string} date - 日期（用于增量分析）
    */
-  async performAnalysis(messages, days = 1) {
+  async performAnalysis(messages, days = 1, groupId = null, date = null) {
     try {
       const config = Config.get()
       const statisticsService = getStatisticsService()
       const topicAnalyzer = getTopicAnalyzer()
       const goldenQuoteAnalyzer = getGoldenQuoteAnalyzer()
       const userTitleAnalyzer = getUserTitleAnalyzer()
+      const maxMessages = config.ai?.maxMessages || 1000
+      const contextOverlap = 50 // 上下文重叠消息数
 
       logger.info(`[群聊洞见-报告] 开始增强分析 (消息数: ${messages.length})`)
 
-      // 1. 基础统计分析
+      // 1. 基础统计分析（始终全量计算）
       const stats = statisticsService.analyze(messages)
       logger.info(`[群聊洞见-报告] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
 
@@ -616,55 +622,186 @@ export class ReportPlugin extends plugin {
         }
       }
 
-      // 2. 并行执行三个 AI 分析
-      const analysisPromises = []
+      // 2. 检查是否需要使用批次缓存+增量分析
+      let topics = []
+      let goldenQuotes = []
+      let topicUsage = null
+      let quoteUsage = null
+      let useIncrementalAnalysis = false
 
-      // 话题分析
-      if (config?.analysis?.topic?.enabled !== false && topicAnalyzer) {
-        analysisPromises.push(
-          topicAnalyzer.analyze(messages, stats)
-            .then(result => ({ type: 'topics', data: result.topics, usage: result.usage }))
-            .catch(err => {
-              logger.error(`[群聊洞见-报告] 话题分析失败: ${err}`)
-              return { type: 'topics', data: [], usage: null }
-            })
-        )
+      if (groupId && date && messages.length > maxMessages && days === 1) {
+        try {
+          // 计算已完成的批次数量
+          const completedBatches = Math.floor(messages.length / maxMessages)
+          const remainingMessages = messages.length % maxMessages
+
+          logger.info(`[群聊洞见-报告] 消息总数: ${messages.length}, 完整批次: ${completedBatches}, 剩余: ${remainingMessages}`)
+
+          // 获取所有批次的缓存
+          const batchCaches = []
+          for (let i = 0; i < completedBatches; i++) {
+            const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${i}`
+            const cachedData = await redis.get(cacheKey)
+
+            if (cachedData) {
+              try {
+                const parsed = JSON.parse(cachedData)
+                if (parsed.success) {
+                  batchCaches.push(parsed)
+                  logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}`)
+                } else {
+                  logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，将全量分析`)
+                  batchCaches.length = 0 // 清空，回退到全量分析
+                  break
+                }
+              } catch (err) {
+                logger.error(`[群聊洞见-报告] 批次${i}缓存解析失败: ${err}`)
+                batchCaches.length = 0
+                break
+              }
+            } else {
+              logger.warn(`[群聊洞见-报告] 批次${i}缓存不存在，将全量分析`)
+              batchCaches.length = 0
+              break
+            }
+          }
+
+          // 如果所有批次缓存都有效，则使用增量分析
+          if (batchCaches.length === completedBatches && completedBatches > 0) {
+            useIncrementalAnalysis = true
+
+            // 合并所有批次的结果
+            let mergedTopics = []
+            let mergedQuotes = []
+
+            for (const batch of batchCaches) {
+              mergedTopics = this.mergeTopics(mergedTopics, batch.topics || [])
+              mergedQuotes = this.mergeGoldenQuotes(mergedQuotes, batch.goldenQuotes || [])
+            }
+
+            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}`)
+
+            // 如果有剩余消息，分析增量部分
+            if (remainingMessages > 0) {
+              const lastBatchEnd = completedBatches * maxMessages
+              const incrementalMessages = [
+                ...messages.slice(lastBatchEnd - contextOverlap, lastBatchEnd), // 上下文
+                ...messages.slice(lastBatchEnd) // 增量消息
+              ]
+
+              logger.info(`[群聊洞见-报告] 分析增量消息: ${incrementalMessages.length}条 (含${contextOverlap}条上下文)`)
+
+              const [incrementalTopics, incrementalQuotes] = await Promise.all([
+                config?.analysis?.topic?.enabled !== false && topicAnalyzer
+                  ? topicAnalyzer.analyze(incrementalMessages, stats)
+                      .then(result => ({ topics: result.topics, usage: result.usage }))
+                      .catch(err => {
+                        logger.error(`[群聊洞见-报告] 增量话题分析失败: ${err}`)
+                        return { topics: [], usage: null }
+                      })
+                  : Promise.resolve({ topics: [], usage: null }),
+
+                config?.analysis?.goldenQuote?.enabled !== false && goldenQuoteAnalyzer
+                  ? goldenQuoteAnalyzer.analyze(incrementalMessages, stats)
+                      .then(result => ({ goldenQuotes: result.goldenQuotes, usage: result.usage }))
+                      .catch(err => {
+                        logger.error(`[群聊洞见-报告] 增量金句分析失败: ${err}`)
+                        return { goldenQuotes: [], usage: null }
+                      })
+                  : Promise.resolve({ goldenQuotes: [], usage: null })
+              ])
+
+              // 合并增量结果
+              topics = this.mergeTopics(mergedTopics, incrementalTopics.topics || [])
+              goldenQuotes = this.mergeGoldenQuotes(mergedQuotes, incrementalQuotes.goldenQuotes || [])
+              topicUsage = incrementalTopics.usage
+              quoteUsage = incrementalQuotes.usage
+
+              logger.info(`[群聊洞见-报告] 增量合并完成 - 最终话题: ${topics.length}, 金句: ${goldenQuotes.length}`)
+            } else {
+              // 没有增量消息，直接使用合并的批次结果
+              topics = mergedTopics
+              goldenQuotes = mergedQuotes
+              logger.info(`[群聊洞见-报告] 无增量消息，使用批次缓存结果`)
+            }
+          }
+        } catch (err) {
+          logger.error(`[群聊洞见-报告] 批次缓存处理失败，回退到全量分析: ${err}`)
+          useIncrementalAnalysis = false
+        }
       }
 
-      // 金句提取
-      if (config?.analysis?.goldenQuote?.enabled !== false && goldenQuoteAnalyzer) {
-        analysisPromises.push(
-          goldenQuoteAnalyzer.analyze(messages, stats)
-            .then(result => ({ type: 'goldenQuotes', data: result.goldenQuotes, usage: result.usage }))
-            .catch(err => {
-              logger.error(`[群聊洞见-报告] 金句提取失败: ${err}`)
-              return { type: 'goldenQuotes', data: [], usage: null }
-            })
-        )
+      // 3. 如果未使用增量分析，则执行常规全量分析
+      if (!useIncrementalAnalysis) {
+        // 全量分析时，如果消息数超过maxMessages，只分析最新的maxMessages条
+        let messagesToAnalyze = messages
+        if (messages.length > maxMessages) {
+          messagesToAnalyze = messages.slice(-maxMessages)
+          logger.info(`[群聊洞见-报告] 消息数${messages.length}超过阈值，全量分析最新的${maxMessages}条消息`)
+        }
+
+        const analysisPromises = []
+
+        // 话题分析
+        if (config?.analysis?.topic?.enabled !== false && topicAnalyzer) {
+          analysisPromises.push(
+            topicAnalyzer.analyze(messagesToAnalyze, stats)
+              .then(result => ({ type: 'topics', data: result.topics, usage: result.usage }))
+              .catch(err => {
+                logger.error(`[群聊洞见-报告] 话题分析失败: ${err}`)
+                return { type: 'topics', data: [], usage: null }
+              })
+          )
+        }
+
+        // 金句提取
+        if (config?.analysis?.goldenQuote?.enabled !== false && goldenQuoteAnalyzer) {
+          analysisPromises.push(
+            goldenQuoteAnalyzer.analyze(messagesToAnalyze, stats)
+              .then(result => ({ type: 'goldenQuotes', data: result.goldenQuotes, usage: result.usage }))
+              .catch(err => {
+                logger.error(`[群聊洞见-报告] 金句提取失败: ${err}`)
+                return { type: 'goldenQuotes', data: [], usage: null }
+              })
+          )
+        }
+
+        // 等待分析完成
+        const results = await Promise.all(analysisPromises)
+
+        for (const result of results) {
+          if (result.type === 'topics') {
+            topics = result.data
+            topicUsage = result.usage
+          } else if (result.type === 'goldenQuotes') {
+            goldenQuotes = result.data
+            quoteUsage = result.usage
+          }
+        }
       }
 
-      // 用户称号
+      // 4. 用户称号分析（始终基于统计数据实时计算）
+      let userTitles = []
+      let titleUsage = null
+
       if (config?.analysis?.userTitle?.enabled !== false && userTitleAnalyzer) {
-        analysisPromises.push(
-          userTitleAnalyzer.analyze(messages, stats)
-            .then(result => ({ type: 'userTitles', data: result.userTitles, usage: result.usage }))
-            .catch(err => {
-              logger.error(`[群聊洞见-报告] 用户称号分析失败: ${err}`)
-              return { type: 'userTitles', data: [], usage: null }
-            })
-        )
+        try {
+          const titleResult = await userTitleAnalyzer.analyze(messages, stats)
+          userTitles = titleResult.userTitles
+          titleUsage = titleResult.usage
+        } catch (err) {
+          logger.error(`[群聊洞见-报告] 用户称号分析失败: ${err}`)
+        }
       }
 
-      // 等待所有分析完成
-      const results = await Promise.all(analysisPromises)
-
-      // 整合结果
+      // 5. 整合结果
       const analysisResults = {
         stats,
-        topics: [],
-        goldenQuotes: [],
-        userTitles: [],
+        topics,
+        goldenQuotes,
+        userTitles,
         skipped: false,
+        useIncrementalAnalysis, // 标记是否使用了增量分析
         tokenUsage: {
           prompt_tokens: 0,
           completion_tokens: 0,
@@ -672,18 +809,17 @@ export class ReportPlugin extends plugin {
         }
       }
 
-      for (const result of results) {
-        analysisResults[result.type] = result.data
-
-        // 累加 token 使用情况
-        if (result.usage) {
-          analysisResults.tokenUsage.prompt_tokens += result.usage.prompt_tokens || 0
-          analysisResults.tokenUsage.completion_tokens += result.usage.completion_tokens || 0
-          analysisResults.tokenUsage.total_tokens += result.usage.total_tokens || 0
+      // 累加 token 使用情况
+      for (const usage of [topicUsage, quoteUsage, titleUsage]) {
+        if (usage) {
+          analysisResults.tokenUsage.prompt_tokens += usage.prompt_tokens || 0
+          analysisResults.tokenUsage.completion_tokens += usage.completion_tokens || 0
+          analysisResults.tokenUsage.total_tokens += usage.total_tokens || 0
         }
       }
 
-      logger.info(`[群聊洞见-报告] 增强分析完成 - 话题: ${analysisResults.topics.length}, 金句: ${analysisResults.goldenQuotes.length}, 称号: ${analysisResults.userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
+      const analysisMode = useIncrementalAnalysis ? '增量' : '全量'
+      logger.info(`[群聊洞见-报告] ${analysisMode}分析完成 - 话题: ${topics.length}, 金句: ${goldenQuotes.length}, 称号: ${userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
 
       return analysisResults
     } catch (err) {
@@ -766,5 +902,70 @@ export class ReportPlugin extends plugin {
       logger.error(`[群聊洞见-报告] 渲染增强总结失败: ${err}`)
       return null
     }
+  }
+
+  /**
+   * 合并话题分析结果
+   * @param {Array} cachedTopics - 缓存的话题
+   * @param {Array} incrementalTopics - 增量话题
+   * @returns {Array} 合并后的话题
+   */
+  mergeTopics(cachedTopics, incrementalTopics) {
+    const topicMap = new Map()
+
+    // 添加缓存的话题（修复：使用正确的字段名 topic.topic）
+    cachedTopics.forEach(topic => {
+      topicMap.set(topic.topic, topic)
+    })
+
+    // 合并增量话题
+    incrementalTopics.forEach(topic => {
+      if (topicMap.has(topic.topic)) {
+        // 精确匹配到相同话题名，合并信息
+        const existing = topicMap.get(topic.topic)
+
+        // 保留原描述，追加新描述
+        existing.detail = `${existing.detail}\n\n[后续]: ${topic.detail}`
+
+        // 合并贡献者（去重）
+        const existingUserIds = new Set(existing.contributors.map(c => c.user_id || c.nickname))
+        topic.contributors.forEach(c => {
+          const userId = c.user_id || c.nickname
+          if (!existingUserIds.has(userId)) {
+            existing.contributors.push(c)
+          }
+        })
+      } else {
+        // 新话题，直接添加
+        topicMap.set(topic.topic, topic)
+      }
+    })
+
+    // 返回所有话题（不限制数量）
+    return Array.from(topicMap.values())
+  }
+
+  /**
+   * 合并金句分析结果
+   * @param {Array} cachedQuotes - 缓存的金句
+   * @param {Array} incrementalQuotes - 增量金句
+   * @returns {Array} 合并后的金句
+   */
+  mergeGoldenQuotes(cachedQuotes, incrementalQuotes) {
+    const quoteSet = new Set()
+    const allQuotes = []
+
+    // 使用 user_id + message 作为去重键
+    const combined = [...cachedQuotes, ...incrementalQuotes]
+    combined.forEach(quote => {
+      const key = `${quote.user_id}_${quote.message}`
+      if (!quoteSet.has(key)) {
+        quoteSet.add(key)
+        allQuotes.push(quote)
+      }
+    })
+
+    // 返回所有金句（不限制数量）
+    return allQuotes
   }
 }

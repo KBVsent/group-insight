@@ -93,6 +93,7 @@ export default class RedisHelper {
       }
     }
 
+    // 保持正序（时间从早到晚），由调用方决定是否需要截取最新的N条
     return messages
   }
 

@@ -55,8 +55,7 @@ groupManager:
     topic:
       # 是否启用话题分析
       enabled: true
-      # 最多提取话题数
-      max_topics: 5
+      # 话题数量不再限制，AI 将根据实际内容返回所有有意义的话题
 
     # 金句提取
     goldenQuote:

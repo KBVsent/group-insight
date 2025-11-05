@@ -8,7 +8,7 @@ import BaseAnalyzer from './BaseAnalyzer.js'
 export default class TopicAnalyzer extends BaseAnalyzer {
   constructor(aiService, config = {}) {
     super(aiService, config)
-    this.maxTopics = config.max_topics || 5
+    // 移除话题数量限制，让AI根据实际情况返回所有话题
   }
 
   /**
@@ -23,11 +23,11 @@ export default class TopicAnalyzer extends BaseAnalyzer {
       return { topics: [], usage: null }
     }
 
-    // 格式化消息
+    // 格式化消息（不限制字符长度，依赖外部传入的消息数量控制）
     const formattedMessages = this.formatMessages(messages, {
       includeTime: true,
-      includeNickname: true,
-      maxLength: 15000  // 限制提示词长度
+      includeNickname: true
+      // 移除 maxLength 限制，由调用方控制消息数量
     })
 
     // 构建提示词
@@ -70,7 +70,7 @@ export default class TopicAnalyzer extends BaseAnalyzer {
           : [],
         detail: topic.detail.trim()
       }))
-      .slice(0, this.maxTopics)
+      // 移除 slice 限制，返回所有话题
 
     logger.info(`[TopicAnalyzer] 提取到 ${validTopics.length} 个话题`)
 
@@ -84,7 +84,7 @@ export default class TopicAnalyzer extends BaseAnalyzer {
   buildPrompt(formattedMessages) {
     return `你是一个帮我进行群聊信息总结的助手,生成总结内容时,你需要严格遵守下面的几个准则:
 
-请分析接下来提供的群聊记录,提取出最多 ${this.maxTopics} 个主要话题。
+请分析接下来提供的群聊记录,提取出所有主要话题。不要限制话题数量，但要保持有必要才作为一个话题。根据实际聊天内容提取所有最有意义的话题。
 
 对于每个话题,请提供:
 1. 话题名称 (突出主题内容,尽量简明扼要,控制在 10 字以内)

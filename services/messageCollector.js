@@ -110,6 +110,9 @@ export default class MessageCollector {
 
       // 检查是否有待更新的 @ 记录（收集下一条消息）
       await this.checkAndUpdatePendingAts(e, message)
+
+      // 检查是否达到消息阈值，触发部分分析
+      await this.checkThresholdTrigger(e.group_id)
     }
 
     // 处理艾特
@@ -541,5 +544,135 @@ export default class MessageCollector {
     }
 
     return messages
+  }
+
+  /**
+   * 检查是否达到消息阈值，触发部分分析
+   * @param {string} groupId - 群号
+   */
+  async checkThresholdTrigger(groupId) {
+    try {
+      const maxMessages = this.config.ai?.maxMessages || 1000
+      const today = moment().format('YYYY-MM-DD')
+
+      // 获取今天的消息数量
+      const messageCount = await this.getMessageCount(groupId, today)
+
+      // 检查是否达到阈值的倍数（1000, 2000, 3000...）
+      if (messageCount > 0 && messageCount % maxMessages === 0) {
+        const batchIndex = Math.floor(messageCount / maxMessages) - 1 // 0-based index
+
+        // 检查该批次是否已经生成过缓存
+        const cacheKey = `Yz:groupManager:batch:${groupId}:${today}:${batchIndex}`
+        const exists = await redis.exists(cacheKey)
+
+        if (!exists) {
+          logger.info(`[群聊洞见] 群${groupId}达到${messageCount}条消息（批次${batchIndex}），触发部分分析`)
+
+          // 异步触发部分分析（不阻塞消息处理）
+          this.triggerPartialAnalysis(groupId, batchIndex, today).catch(err => {
+            logger.error(`[群聊洞见] 批次${batchIndex}自动触发分析失败: ${err}`)
+          })
+        }
+      }
+    } catch (err) {
+      logger.error(`[群聊洞见] 检查阈值触发失败: ${err}`)
+    }
+  }
+
+  /**
+   * 获取指定日期的消息数量
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期 (YYYY-MM-DD)
+   * @returns {number} 消息数量
+   */
+  async getMessageCount(groupId, date) {
+    try {
+      const key = this.redisHelper.getMessageKey(groupId, date)
+      const count = await redis.lLen(key)
+      return count || 0
+    } catch (err) {
+      logger.error(`[群聊洞见] 获取消息数量失败: ${err}`)
+      return 0
+    }
+  }
+
+  /**
+   * 触发部分分析（仅话题和金句）
+   * @param {string} groupId - 群号
+   * @param {number} batchIndex - 批次索引（0-based: 0表示0-1000, 1表示1000-2000）
+   * @param {string} date - 日期
+   */
+  async triggerPartialAnalysis(groupId, batchIndex, date) {
+    try {
+      // 动态导入分析器（避免循环依赖）
+      const { default: Services } = await import('../components/Services.js')
+
+      const maxMessages = this.config.ai?.maxMessages || 1000
+      const contextOverlap = 50 // 上下文重叠消息数
+
+      // 计算该批次的消息范围
+      const startIndex = batchIndex * maxMessages
+      const endIndex = (batchIndex + 1) * maxMessages
+
+      logger.info(`[群聊洞见] 批次${batchIndex}: 准备分析消息 [${startIndex}-${endIndex}]`)
+
+      // 获取所有消息（正序：最早到最新）
+      const allMessages = await this.getMessages(groupId, 1)
+
+      // 提取该批次的消息，包含上下文
+      // batch 0: [0, 1000]
+      // batch 1: [950, 2000] (包含50条上下文)
+      // batch 2: [1950, 3000] (包含50条上下文)
+      const contextStart = Math.max(0, startIndex - contextOverlap)
+      const messagesToAnalyze = allMessages.slice(contextStart, endIndex)
+
+      if (messagesToAnalyze.length === 0) {
+        logger.warn(`[群聊洞见] 批次${batchIndex}消息为空，跳过分析`)
+        return
+      }
+
+      const actualStart = contextStart
+      const actualEnd = Math.min(allMessages.length, endIndex)
+      logger.info(`[群聊洞见] 批次${batchIndex}开始分析 [${actualStart}-${actualEnd}] 共 ${messagesToAnalyze.length} 条消息（含${startIndex - contextStart}条上下文）`)
+
+      // 并行分析话题和金句
+      const [topicResult, quoteResult] = await Promise.all([
+        Services.getTopicAnalyzer().analyze(messagesToAnalyze),
+        Services.getGoldenQuoteAnalyzer().analyze(messagesToAnalyze)
+      ])
+
+      // 缓存结果到Redis（使用批次索引作为key）
+      const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${batchIndex}`
+      const cacheData = {
+        batchIndex,
+        startIndex,
+        endIndex,
+        messageCount: messagesToAnalyze.length,
+        topics: topicResult?.topics || [],
+        goldenQuotes: quoteResult?.goldenQuotes || [],
+        analyzedAt: Date.now(),
+        success: true
+      }
+
+      await redis.set(cacheKey, JSON.stringify(cacheData), 'EX', 86400) // 24小时过期
+
+      logger.info(`[群聊洞见] 批次${batchIndex}分析完成并缓存 [${startIndex}-${endIndex}]，话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}`)
+    } catch (err) {
+      logger.error(`[群聊洞见] 批次${batchIndex}触发分析失败: ${err.stack || err}`)
+
+      // 即使失败也记录一个标记，避免重复尝试
+      try {
+        const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${batchIndex}`
+        await redis.set(cacheKey, JSON.stringify({
+          batchIndex,
+          success: false,
+          error: err.message,
+          analyzedAt: Date.now()
+        }), 'EX', 86400)
+      } catch (cacheErr) {
+        logger.error(`[群聊洞见] 保存失败标记失败: ${cacheErr}`)
+      }
+    }
   }
 }
