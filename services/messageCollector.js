@@ -552,6 +552,12 @@ export default class MessageCollector {
    */
   async checkThresholdTrigger(groupId) {
     try {
+      // 不在白名单不触发
+      const whitelist = this.config?.schedule?.whitelist || []
+      if (whitelist.length > 0 && !whitelist.includes(groupId.toString())) {
+        return
+      }
+
       const maxMessages = this.config.ai?.maxMessages || 1000
       const today = moment().format('YYYY-MM-DD')
 
