@@ -675,6 +675,7 @@ export class ReportPlugin extends plugin {
             let mergedQuotes = []
 
             for (const batch of batchCaches) {
+              logger.debug(`[群聊洞见-报告] 合并批次${batch.batchIndex} - 话题: ${batch.topics?.length || 0}, 金句: ${batch.goldenQuotes?.length || 0}`)
               mergedTopics = this.mergeTopics(mergedTopics, batch.topics || [])
               mergedQuotes = this.mergeGoldenQuotes(mergedQuotes, batch.goldenQuotes || [])
             }
@@ -717,6 +718,9 @@ export class ReportPlugin extends plugin {
               ])
 
               // 合并增量结果
+              logger.debug(`[群聊洞见-报告] 增量分析结果 - 话题: ${incrementalTopics.topics?.length || 0}, 金句: ${incrementalQuotes.goldenQuotes?.length || 0}`)
+              logger.debug(`[群聊洞见-报告] 合并前批次缓存 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}`)
+
               topics = this.mergeTopics(mergedTopics, incrementalTopics.topics || [])
               goldenQuotes = this.mergeGoldenQuotes(mergedQuotes, incrementalQuotes.goldenQuotes || [])
               topicUsage = incrementalTopics.usage
@@ -727,7 +731,7 @@ export class ReportPlugin extends plugin {
               // 没有增量消息，直接使用合并的批次结果
               topics = mergedTopics
               goldenQuotes = mergedQuotes
-              logger.info(`[群聊洞见-报告] 无增量消息，使用批次缓存结果`)
+              logger.info(`[群聊洞见-报告] 无增量消息，使用批次缓存结果 - 话题: ${topics.length}, 金句: ${goldenQuotes.length}`)
             }
           }
         } catch (err) {
