@@ -642,13 +642,27 @@ export default class MessageCollector {
       const actualEnd = Math.min(allMessages.length, endIndex)
       logger.info(`[群聊洞见] 批次${batchIndex}开始分析 [${actualStart}-${actualEnd}] 共 ${messagesToAnalyze.length} 条消息（含${startIndex - contextStart}条上下文）`)
 
-      // 并行分析话题和金句
+      // 构建轻量级用户映射
+      const userMap = new Map()
+      for (const msg of messagesToAnalyze) {
+        if (msg.user_id && msg.nickname && !userMap.has(msg.nickname)) {
+          userMap.set(msg.nickname, {
+            user_id: msg.user_id,
+            nickname: msg.nickname
+          })
+        }
+      }
+      const stats = {
+        users: Array.from(userMap.values())
+      }
+
+      // 并行分析话题和金句（传递轻量级 stats 以获取 user_id）
       const topicAnalyzer = getTopicAnalyzer()
       const goldenQuoteAnalyzer = getGoldenQuoteAnalyzer()
 
       const [topicResult, quoteResult] = await Promise.all([
-        topicAnalyzer?.analyze(messagesToAnalyze),
-        goldenQuoteAnalyzer?.analyze(messagesToAnalyze)
+        topicAnalyzer?.analyze(messagesToAnalyze, stats),
+        goldenQuoteAnalyzer?.analyze(messagesToAnalyze, stats)
       ])
 
       // 计算 token 使用情况
