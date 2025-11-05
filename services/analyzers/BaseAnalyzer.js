@@ -1,3 +1,5 @@
+import { jsonrepair } from 'jsonrepair'
+
 /**
  * AI 分析器基类
  * 提供通用的 AI 调用和错误处理逻辑
@@ -67,32 +69,63 @@ export default class BaseAnalyzer {
       // 使用回退策略提取 JSON（不输出日志，避免干扰）
     }
 
+    // 尝试提取 JSON 内容
+    let extractedJson = null
+
     try {
       // 尝试提取 JSON 代码块
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) ||
                        content.match(/```\s*([\s\S]*?)\s*```/)
 
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[1])
+        extractedJson = jsonMatch[1]
+      } else {
+        // 尝试提取数组或对象
+        const arrayMatch = content.match(/\[[\s\S]*\]/)
+        if (arrayMatch) {
+          extractedJson = arrayMatch[0]
+        } else {
+          const objectMatch = content.match(/\{[\s\S]*\}/)
+          if (objectMatch) {
+            extractedJson = objectMatch[0]
+          }
+        }
       }
 
-      // 尝试提取数组或对象
-      const arrayMatch = content.match(/\[[\s\S]*\]/)
-      if (arrayMatch) {
-        return JSON.parse(arrayMatch[0])
-      }
-
-      const objectMatch = content.match(/\{[\s\S]*\}/)
-      if (objectMatch) {
-        return JSON.parse(objectMatch[0])
+      // 如果提取到内容，先尝试直接解析
+      if (extractedJson) {
+        try {
+          return JSON.parse(extractedJson)
+        } catch (parseErr) {
+          // 直接解析失败，尝试使用 jsonrepair 修复
+          logger.info(`[${this.constructor.name}] 尝试使用 jsonrepair 修复 JSON...`)
+          try {
+            const repaired = jsonrepair(extractedJson)
+            const parsed = JSON.parse(repaired)
+            logger.mark(`[${this.constructor.name}] jsonrepair 修复成功！`)
+            return parsed
+          } catch (repairErr) {
+            logger.warn(`[${this.constructor.name}] jsonrepair 修复失败: ${repairErr.message}`)
+            throw repairErr
+          }
+        }
       }
     } catch (err) {
-      logger.warn(`[${this.constructor.name}] JSON 修复失败: ${err.message}`)
+      logger.warn(`[${this.constructor.name}] JSON 解析失败: ${err.message}`)
     }
 
-    // 所有方法都失败
-    logger.error(`[${this.constructor.name}] 无法解析 JSON 响应`)
-    logger.debug(`[${this.constructor.name}] 原始内容: ${content.substring(0, 200)}...`)
+    // 最后尝试直接对原始内容使用 jsonrepair（可能 AI 直接返回了不规范的 JSON）
+    try {
+      logger.info(`[${this.constructor.name}] 尝试对原始内容使用 jsonrepair...`)
+      const repaired = jsonrepair(content)
+      const parsed = JSON.parse(repaired)
+      logger.mark(`[${this.constructor.name}] jsonrepair 修复原始内容成功！`)
+      return parsed
+    } catch (err) {
+      logger.error(`[${this.constructor.name}] 无法解析 JSON 响应`)
+      logger.debug(`[${this.constructor.name}] 原始内容: ${content.substring(0, 200)}...`)
+    }
+
     return null
   }
 
