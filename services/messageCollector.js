@@ -651,6 +651,21 @@ export default class MessageCollector {
         goldenQuoteAnalyzer?.analyze(messagesToAnalyze)
       ])
 
+      // 计算 token 使用情况
+      const tokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      }
+
+      for (const usage of [topicResult?.usage, quoteResult?.usage]) {
+        if (usage) {
+          tokenUsage.prompt_tokens += usage.prompt_tokens || 0
+          tokenUsage.completion_tokens += usage.completion_tokens || 0
+          tokenUsage.total_tokens += usage.total_tokens || 0
+        }
+      }
+
       // 缓存结果到Redis（使用批次索引作为key）
       const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${batchIndex}`
       const cacheData = {
@@ -660,13 +675,14 @@ export default class MessageCollector {
         messageCount: messagesToAnalyze.length,
         topics: topicResult?.topics || [],
         goldenQuotes: quoteResult?.goldenQuotes || [],
+        tokenUsage,  // 保存 token 使用情况
         analyzedAt: Date.now(),
         success: true
       }
 
       await redis.set(cacheKey, JSON.stringify(cacheData), 'EX', 86400) // 24小时过期
 
-      logger.info(`[群聊洞见] 批次${batchIndex}分析完成并缓存 [${startIndex}-${endIndex}]，话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}`)
+      logger.info(`[群聊洞见] 批次${batchIndex}分析完成并缓存 [${startIndex}-${endIndex}]，话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}, Tokens: ${tokenUsage.total_tokens}`)
     } catch (err) {
       logger.error(`[群聊洞见] 批次${batchIndex}触发分析失败: ${err.stack || err}`)
 

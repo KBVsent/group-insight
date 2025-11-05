@@ -628,6 +628,11 @@ export class ReportPlugin extends plugin {
       let topicUsage = null
       let quoteUsage = null
       let useIncrementalAnalysis = false
+      let batchTokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      }
 
       if (groupId && date && messages.length > maxMessages && days === 1) {
         try {
@@ -651,7 +656,15 @@ export class ReportPlugin extends plugin {
                 const parsed = JSON.parse(cachedData)
                 if (parsed.success) {
                   batchCaches.push(parsed)
-                  logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}`)
+
+                  // 累加批次的 token 使用情况
+                  if (parsed.tokenUsage) {
+                    batchTokenUsage.prompt_tokens += parsed.tokenUsage.prompt_tokens || 0
+                    batchTokenUsage.completion_tokens += parsed.tokenUsage.completion_tokens || 0
+                    batchTokenUsage.total_tokens += parsed.tokenUsage.total_tokens || 0
+                  }
+
+                  logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}, Tokens: ${parsed.tokenUsage?.total_tokens || 0}`)
                 } else {
                   failedBatches.push(i)
                   logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，跳过此批次`)
@@ -685,7 +698,7 @@ export class ReportPlugin extends plugin {
             if (missingBatches.length > 0) skippedInfo.push(`缺失: ${missingBatches.join(',')}`)
             const skippedText = skippedInfo.length > 0 ? ` (跳过批次 ${skippedInfo.join(', ')})` : ''
 
-            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}${skippedText}`)
+            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}${skippedText}`)
 
             // 如果有剩余消息，分析增量部分
             if (remainingMessages > 0) {
@@ -818,9 +831,9 @@ export class ReportPlugin extends plugin {
         }
       }
 
-      // 累加 token 使用情况
-      for (const usage of [topicUsage, quoteUsage, titleUsage]) {
-        if (usage) {
+      // 累加 token 使用情况（包括批次缓存的 token）
+      for (const usage of [batchTokenUsage, topicUsage, quoteUsage, titleUsage]) {
+        if (usage && usage.total_tokens > 0) {
           analysisResults.tokenUsage.prompt_tokens += usage.prompt_tokens || 0
           analysisResults.tokenUsage.completion_tokens += usage.completion_tokens || 0
           analysisResults.tokenUsage.total_tokens += usage.total_tokens || 0
@@ -964,10 +977,12 @@ export class ReportPlugin extends plugin {
     const quoteSet = new Set()
     const allQuotes = []
 
-    // 使用 user_id + message 作为去重键
+    // 使用 user_id + quote 作为去重键（金句结构：{ quote, sender: { user_id, nickname }, reason }）
     const combined = [...cachedQuotes, ...incrementalQuotes]
     combined.forEach(quote => {
-      const key = `${quote.user_id}_${quote.message}`
+      const userId = quote.sender?.user_id || quote.sender?.nickname || 'unknown'
+      const quoteText = quote.quote || ''
+      const key = `${userId}_${quoteText}`
       if (!quoteSet.has(key)) {
         quoteSet.add(key)
         allQuotes.push(quote)
