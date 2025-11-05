@@ -21,6 +21,11 @@ export class AdminPlugin extends plugin {
           reg: '^#?清除全部(艾特|at)数据$',
           fnc: 'clearAllAtRecords',
           permission: 'master'
+        },
+        {
+          reg: '^#?测试部分分析$',
+          fnc: 'testPartialAnalysis',
+          permission: 'master'
         }
       ]
     })
@@ -72,5 +77,36 @@ export class AdminPlugin extends plugin {
 
     const count = await messageCollector.clearAllAtRecords()
     return this.reply(`已成功清除 ${count} 条艾特记录`)
+  }
+
+  /**
+   * 测试部分分析（仅主人）
+   */
+  async testPartialAnalysis(e) {
+    // 检查是否在群聊中
+    if (!e.isGroup) {
+      return this.reply('此功能仅支持群聊使用', true)
+    }
+
+    // 获取消息收集器
+    const messageCollector = getMessageCollector()
+    if (!messageCollector) {
+      return this.reply('消息收集功能未启用', true)
+    }
+
+    // 使用当前日期和批次0（0-maxMessages）
+    const moment = (await import('moment')).default
+    const date = moment().format('YYYY-MM-DD')
+    const batchIndex = 0
+
+    await this.reply('开始测试批次0的部分分析...', true)
+
+    try {
+      await messageCollector.triggerPartialAnalysis(e.group_id, batchIndex, date)
+      return this.reply('批次0分析已完成！查看日志获取详情。', true)
+    } catch (err) {
+      logger.error(`[群聊洞见] 手动触发分析失败: ${err}`)
+      return this.reply(`分析失败: ${err.message}`, true)
+    }
   }
 }

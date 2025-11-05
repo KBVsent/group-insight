@@ -612,7 +612,7 @@ export default class MessageCollector {
   async triggerPartialAnalysis(groupId, batchIndex, date) {
     try {
       // 动态导入分析器（避免循环依赖）
-      const { default: Services } = await import('../components/Services.js')
+      const { getTopicAnalyzer, getGoldenQuoteAnalyzer } = await import('../components/Services.js')
 
       const maxMessages = this.config.ai?.maxMessages || 1000
       const contextOverlap = 50 // 上下文重叠消息数
@@ -643,9 +643,12 @@ export default class MessageCollector {
       logger.info(`[群聊洞见] 批次${batchIndex}开始分析 [${actualStart}-${actualEnd}] 共 ${messagesToAnalyze.length} 条消息（含${startIndex - contextStart}条上下文）`)
 
       // 并行分析话题和金句
+      const topicAnalyzer = getTopicAnalyzer()
+      const goldenQuoteAnalyzer = getGoldenQuoteAnalyzer()
+
       const [topicResult, quoteResult] = await Promise.all([
-        Services.getTopicAnalyzer().analyze(messagesToAnalyze),
-        Services.getGoldenQuoteAnalyzer().analyze(messagesToAnalyze)
+        topicAnalyzer?.analyze(messagesToAnalyze),
+        goldenQuoteAnalyzer?.analyze(messagesToAnalyze)
       ])
 
       // 缓存结果到Redis（使用批次索引作为key）
