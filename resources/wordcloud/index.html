@@ -62,14 +62,14 @@
       minSize = Math.max(20, canvas.width / 35);
     } else if (wordCount < 100) {
       // 中等词汇：标准参数
-      gridSize = 8;
-      baseFontSize = canvas.width / 35;
-      minSize = Math.max(16, canvas.width / 40);
+      gridSize = 4;
+      baseFontSize = canvas.width / 45;
+      minSize = Math.max(16, canvas.width / 60);
     } else {
       // 大量词汇：小字体 + 高密度
-      gridSize = 6;
-      baseFontSize = canvas.width / 45;
-      minSize = Math.max(12, canvas.width / 50);
+      gridSize = 2;
+      baseFontSize = canvas.width / 65;
+      minSize = Math.max(12, canvas.width / 80);
     }
 
     // 配置词云 - 使用归一化权重 (1-10)，字体大小完全可控
