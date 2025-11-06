@@ -233,6 +233,7 @@ export class ReportPlugin extends plugin {
 
           // 执行分析
           logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成报告 (消息数: ${messages.length})`)
+          const today = moment().format('YYYY-MM-DD')
           const analysisResults = await this.performAnalysis(messages, 1, groupId, today)
 
           if (!analysisResults) {
@@ -241,7 +242,6 @@ export class ReportPlugin extends plugin {
           }
 
           // 保存报告到 Redis
-          const today = moment().format('YYYY-MM-DD')
           await messageCollector.redisHelper.saveReport(groupId, today, {
             stats: analysisResults.stats,
             topics: analysisResults.topics,
