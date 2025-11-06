@@ -36,7 +36,7 @@ export class ReportPlugin extends plugin {
           permission: 'all'
         },
         {
-          reg: '^#强制生成报告$',
+          reg: '^#强制生成报告\\s*(今天|昨天|前天|\\d{4}-\\d{2}-\\d{2})?$',
           fnc: 'forceGenerateReport',
           permission: 'master'
         }
@@ -520,14 +520,44 @@ export class ReportPlugin extends plugin {
       return this.reply('报告功能未就绪', true)
     }
 
-    await this.reply('正在强制生成今天的群聊报告，请稍候...')
-
     try {
-      // 获取今天的消息
-      const messages = await messageCollector.getMessages(e.group_id, 1)
+      // 解析日期参数
+      const match = e.msg.match(/(今天|昨天|前天|(\d{4}-\d{2}-\d{2}))/)
+      let targetDate = moment().format('YYYY-MM-DD')
+      let dateLabel = '今天'
+      let daysOffset = 0
+
+      if (match) {
+        if (match[1] === '昨天') {
+          targetDate = moment().subtract(1, 'days').format('YYYY-MM-DD')
+          dateLabel = '昨天'
+          daysOffset = 1
+        } else if (match[1] === '前天') {
+          targetDate = moment().subtract(2, 'days').format('YYYY-MM-DD')
+          dateLabel = '前天'
+          daysOffset = 2
+        } else if (match[2]) {
+          const date = moment(match[2], 'YYYY-MM-DD', true)
+          if (date.isValid()) {
+            targetDate = date.format('YYYY-MM-DD')
+            dateLabel = moment(targetDate).format('YYYY年MM月DD日')
+            daysOffset = moment().diff(date, 'days')
+          } else {
+            return this.reply('日期格式错误，请使用：YYYY-MM-DD（如 2024-11-01）', true)
+          }
+        } else if (match[1] === '今天') {
+          dateLabel = '今天'
+          daysOffset = 0
+        }
+      }
+
+      await this.reply(`正在强制生成${dateLabel}的群聊报告，请稍候...`)
+
+      // 获取指定日期的消息
+      const messages = await messageCollector.getMessages(e.group_id, 1, daysOffset)
 
       if (messages.length === 0) {
-        return this.reply('今天还没有消息，无法生成报告', true)
+        return this.reply(`${dateLabel}还没有消息，无法生成报告`, true)
       }
 
       // 获取群名
@@ -539,18 +569,17 @@ export class ReportPlugin extends plugin {
         groupName = `群${e.group_id}`
       }
 
-      logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
+      logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
 
       // 执行分析
-      const today = moment().format('YYYY-MM-DD')
-      const analysisResults = await this.performAnalysis(messages, 1, e.group_id, today)
+      const analysisResults = await this.performAnalysis(messages, 1, e.group_id, targetDate)
 
       if (!analysisResults) {
         return this.reply('分析失败，请查看日志', true)
       }
 
       // 保存报告到 Redis（覆盖已有报告）
-      await messageCollector.redisHelper.saveReport(e.group_id, today, {
+      await messageCollector.redisHelper.saveReport(e.group_id, targetDate, {
         stats: analysisResults.stats,
         topics: analysisResults.topics,
         goldenQuotes: analysisResults.goldenQuotes,
@@ -562,16 +591,16 @@ export class ReportPlugin extends plugin {
       // 设置冷却标记（主人下次触发依然会无视冷却）
       await this.setCooldown(e.group_id, 'master', messages.length)
 
-      logger.mark(`[群聊洞见-报告] 主人强制生成报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+      logger.mark(`[群聊洞见-报告] 主人强制生成${dateLabel}报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
       // 渲染并发送报告
-      const savedReport = await messageCollector.redisHelper.getReport(e.group_id, today)
+      const savedReport = await messageCollector.redisHelper.getReport(e.group_id, targetDate)
       const img = await this.renderReport(savedReport || analysisResults, {
         groupName,
         provider: aiService?.provider || 'AI',
         model: aiService?.model || '',
         tokenUsage: (savedReport || analysisResults).tokenUsage,
-        date: today
+        date: targetDate
       })
 
       if (img) {
