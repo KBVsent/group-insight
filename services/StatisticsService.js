@@ -71,8 +71,8 @@ export default class StatisticsService {
       }
     }
 
-    // 计算日期范围
-    const timestamps = messages.map(m => m.timestamp || m.time * 1000)
+    // 计算日期范围（使用 time 字段即消息发送时间，而不是 timestamp 即收集时间）
+    const timestamps = messages.map(m => m.time * 1000)
     const minTime = Math.min(...timestamps)
     const maxTime = Math.max(...timestamps)
     const dateRange = {

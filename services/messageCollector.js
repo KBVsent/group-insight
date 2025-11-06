@@ -356,8 +356,8 @@ export default class MessageCollector {
    * @param {string} groupId - 群号
    * @param {number} days - 天数
    */
-  async getMessages(groupId, days = 1) {
-    return await this.redisHelper.getMessages(groupId, days)
+  async getMessages(groupId, days = 1, offset = 0) {
+    return await this.redisHelper.getMessages(groupId, days, offset)
   }
 
   /**
