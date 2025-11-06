@@ -21,87 +21,57 @@ export default class StatisticsService {
       return this.getEmptyStats()
     }
 
-    // 基础统计
-    const basicStats = this.calculateBasicStats(messages)
-
-    // 用户统计
-    const userStats = this.calculateUserStats(messages)
-
-    // 小时分布统计
-    const hourlyStats = this.calculateHourlyStats(messages)
-
-    // 表情统计
-    const emojiStats = this.calculateEmojiStats(messages)
-
-    return {
-      basic: basicStats,
-      users: userStats,
-      hourly: hourlyStats,
-      emoji: emojiStats,
-      topUsers: this.rankUsers(userStats)
+    // 初始化统计容器
+    const userMap = new Map()
+    const hourlyCount = new Array(24).fill(0)
+    const emojiStats = {
+      face: 0,
+      mface: 0,
+      emoji: 0,
+      total: 0
     }
-  }
 
-  /**
-   * 计算基础统计信息
-   * @param {Array} messages - 消息列表
-   */
-  calculateBasicStats(messages) {
-    const uniqueUsers = new Set()
     let totalChars = 0
     let totalEmojis = 0
     let totalReplies = 0
+    const timestamps = []
 
+    // 单次遍历完成所有统计
     for (const msg of messages) {
-      uniqueUsers.add(msg.user_id)
-      totalChars += msg.length || msg.message?.length || 0
+      const userId = msg.user_id
+      const hour = msg.hour !== undefined ? msg.hour : new Date(msg.time * 1000).getHours()
+      const msgLength = msg.length || msg.message?.length || 0
 
-      // 统计表情
-      if (msg.faces) {
-        if (typeof msg.faces === 'object' && msg.faces.total !== undefined) {
-          totalEmojis += msg.faces.total
-        } else if (Array.isArray(msg.faces)) {
-          totalEmojis += msg.faces.length
-        }
-      }
+      // 基础统计
+      totalChars += msgLength
+      timestamps.push(msg.time * 1000)
 
-      // 统计回复消息
       if (msg.hasReply) {
         totalReplies++
       }
-    }
 
-    // 计算日期范围（使用 time 字段即消息发送时间，而不是 timestamp 即收集时间）
-    const timestamps = messages.map(m => m.time * 1000)
-    const minTime = Math.min(...timestamps)
-    const maxTime = Math.max(...timestamps)
-    const dateRange = {
-      start: new Date(minTime).toLocaleDateString('zh-CN'),
-      end: new Date(maxTime).toLocaleDateString('zh-CN')
-    }
+      // 表情统计（基础）
+      if (msg.faces) {
+        if (typeof msg.faces === 'object' && msg.faces.total !== undefined) {
+          totalEmojis += msg.faces.total
+          emojiStats.face += msg.faces.face?.length || 0
+          emojiStats.mface += msg.faces.mface?.length || 0
+          if (Array.isArray(msg.faces.emoji)) {
+            emojiStats.emoji += msg.faces.emoji.reduce((sum, count) => sum + count, 0)
+          }
+          emojiStats.total += msg.faces.total
+        } else if (Array.isArray(msg.faces)) {
+          const faceCount = msg.faces.length
+          totalEmojis += faceCount
+          emojiStats.face += faceCount
+          emojiStats.total += faceCount
+        }
+      }
 
-    return {
-      totalMessages: messages.length,
-      totalUsers: uniqueUsers.size,
-      totalChars,
-      totalEmojis,
-      totalReplies,
-      replyRatio: messages.length > 0 ? (totalReplies / messages.length) : 0,
-      avgCharsPerMsg: messages.length > 0 ? (totalChars / messages.length).toFixed(1) : 0,
-      dateRange
-    }
-  }
+      // 小时分布统计
+      hourlyCount[hour]++
 
-  /**
-   * 计算用户级别统计
-   * @param {Array} messages - 消息列表
-   */
-  calculateUserStats(messages) {
-    const userMap = new Map()
-
-    for (const msg of messages) {
-      const userId = msg.user_id
-
+      // 用户统计
       if (!userMap.has(userId)) {
         userMap.set(userId, {
           user_id: userId,
@@ -110,16 +80,17 @@ export default class StatisticsService {
           charCount: 0,
           emojiCount: 0,
           replyCount: 0,
-          nightCount: 0,  // 夜间消息数
-          hourlyDistribution: new Array(24).fill(0)  // 24小时分布
+          nightCount: 0,
+          hourlyDistribution: new Array(24).fill(0)
         })
       }
 
       const userStat = userMap.get(userId)
       userStat.messageCount++
-      userStat.charCount += msg.length || msg.message?.length || 0
+      userStat.charCount += msgLength
+      userStat.hourlyDistribution[hour]++
 
-      // 表情统计
+      // 用户表情统计
       if (msg.faces) {
         if (typeof msg.faces === 'object' && msg.faces.total !== undefined) {
           userStat.emojiCount += msg.faces.total
@@ -128,22 +99,36 @@ export default class StatisticsService {
         }
       }
 
-      // 回复统计
+      // 用户回复统计
       if (msg.hasReply) {
         userStat.replyCount++
       }
 
-      // 小时分布
-      const hour = msg.hour !== undefined ? msg.hour : new Date(msg.time * 1000).getHours()
-      userStat.hourlyDistribution[hour]++
-
-      // 夜间活跃度
+      // 用户夜间活跃度
       if (this.isNightHour(hour)) {
         userStat.nightCount++
       }
     }
 
-    // 计算比率和平均值
+    // 计算基础统计的派生值
+    const minTime = Math.min(...timestamps)
+    const maxTime = Math.max(...timestamps)
+    const basicStats = {
+      totalMessages: messages.length,
+      totalUsers: userMap.size,
+      totalChars,
+      totalEmojis,
+      totalReplies,
+      replyRatio: messages.length > 0 ? (totalReplies / messages.length) : 0,
+      avgCharsPerMsg: messages.length > 0 ? (totalChars / messages.length).toFixed(1) : 0,
+      dateRange: {
+        start: new Date(minTime).toLocaleDateString('zh-CN'),
+        end: new Date(maxTime).toLocaleDateString('zh-CN')
+      }
+    }
+
+    // 计算用户统计的派生值
+    const userStats = []
     for (const userStat of userMap.values()) {
       userStat.avgLength = userStat.messageCount > 0
         ? (userStat.charCount / userStat.messageCount).toFixed(1)
@@ -157,31 +142,13 @@ export default class StatisticsService {
       userStat.nightRatio = userStat.messageCount > 0
         ? (userStat.nightCount / userStat.messageCount).toFixed(2)
         : 0
-
-      // 找出最活跃的时段
       userStat.mostActiveHour = this.findPeakHour(userStat.hourlyDistribution)
+      userStats.push(userStat)
     }
 
-    return Array.from(userMap.values())
-  }
-
-  /**
-   * 计算小时分布统计
-   * @param {Array} messages - 消息列表
-   */
-  calculateHourlyStats(messages) {
-    const hourlyCount = new Array(24).fill(0)
-
-    for (const msg of messages) {
-      const hour = msg.hour !== undefined ? msg.hour : new Date(msg.time * 1000).getHours()
-      hourlyCount[hour]++
-    }
-
-    // 找出峰值时段
+    // 计算小时分布统计的派生值
     const peakHour = this.findPeakHour(hourlyCount)
     const peakCount = hourlyCount[peakHour]
-
-    // 计算活跃度等级
     const hourlyActivity = hourlyCount.map(count => {
       if (count === 0) return 'none'
       const ratio = count / peakCount
@@ -190,50 +157,23 @@ export default class StatisticsService {
       return 'low'
     })
 
-    return {
+    const hourlyStats = {
       hourlyCount,
       hourlyActivity,
       peakHour,
       peakCount,
       peakPeriod: this.getHourRange(peakHour)
     }
+
+    return {
+      basic: basicStats,
+      users: userStats,
+      hourly: hourlyStats,
+      emoji: emojiStats,
+      topUsers: this.rankUsers(userStats)
+    }
   }
 
-  /**
-   * 计算表情统计
-   * @param {Array} messages - 消息列表
-   */
-  calculateEmojiStats(messages) {
-    const stats = {
-      face: 0,      // 普通表情数
-      mface: 0,     // 动画表情数
-      emoji: 0,     // Emoji 数
-      total: 0      // 总表情数
-    }
-
-    for (const msg of messages) {
-      if (!msg.faces) continue
-
-      if (typeof msg.faces === 'object' && !Array.isArray(msg.faces)) {
-        // 新格式（适配 Yunzai 实际消息结构）
-        stats.face += msg.faces.face?.length || 0
-        stats.mface += msg.faces.mface?.length || 0
-
-        // Emoji 统计（emoji 字段是数组，每个元素是该条消息的 emoji 数量）
-        if (Array.isArray(msg.faces.emoji)) {
-          stats.emoji += msg.faces.emoji.reduce((sum, count) => sum + count, 0)
-        }
-
-        stats.total += msg.faces.total || 0
-      } else if (Array.isArray(msg.faces)) {
-        // 旧格式兼容 (只有 face)
-        stats.face += msg.faces.length
-        stats.total += msg.faces.length
-      }
-    }
-
-    return stats
-  }
 
   /**
    * 对用户按消息数排序

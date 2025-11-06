@@ -1,0 +1,6 @@
+# 忽略用户配置文件
+config.yaml
+
+# 保留默认配置和示例
+!default_config.yaml
+!stopwords.json

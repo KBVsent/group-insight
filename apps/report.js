@@ -14,8 +14,7 @@ import {
   getActivityVisualizer,
   getTopicAnalyzer,
   getGoldenQuoteAnalyzer,
-  getUserTitleAnalyzer,
-  reinitializeServices
+  getUserTitleAnalyzer
 } from '../components/index.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -97,11 +96,6 @@ export class ReportPlugin extends plugin {
       logger.info('[群聊洞见-报告] 定时总结未启用（需配置白名单群）')
     }
 
-    // 监听配置变更
-    Config.onChange(async (newConfig) => {
-      await reinitializeServices(newConfig)
-      logger.mark('[群聊洞见-报告] 服务已重新初始化')
-    })
   }
 
   /**

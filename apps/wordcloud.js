@@ -2,7 +2,7 @@
  * 词云生成功能
  */
 import plugin from '../../../lib/plugins/plugin.js'
-import { Config, getMessageCollector, getWordCloudGenerator, reinitializeServices } from '../components/index.js'
+import { getMessageCollector, getWordCloudGenerator } from '../components/index.js'
 
 export class WordCloudPlugin extends plugin {
   constructor() {
@@ -29,11 +29,6 @@ export class WordCloudPlugin extends plugin {
     getMessageCollector()
     getWordCloudGenerator()
 
-    // 监听配置变更
-    Config.onChange(async (newConfig) => {
-      await reinitializeServices(newConfig)
-      logger.mark('[群聊洞见-词云] 服务已重新初始化')
-    })
   }
 
   /**

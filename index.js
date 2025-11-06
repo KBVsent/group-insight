@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Config } from './components/index.js'
+import { Config, stopAllServices } from './components/index.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -20,6 +20,13 @@ try {
   // 加载配置
   await Config.load()
   Config.watch()
+
+  // 统一监听配置变更（避免多个插件重复处理）
+  Config.onChange(async (newConfig) => {
+    const { reinitializeServices } = await import('./components/index.js')
+    await reinitializeServices(newConfig)
+    logger.mark('[群聊洞见] 配置变更，所有服务已重新初始化')
+  })
 
   // 扫描并加载所有插件
   const files = fs.readdirSync(appsPath).filter(f => f.endsWith('.js'))
@@ -38,5 +45,12 @@ try {
 } catch (err) {
   logger.error('[群聊洞见] 插件初始化失败:', err)
 }
+
+// 进程退出钩子：确保清理所有监听器和资源
+process.on('exit', () => {
+  logger.info('[群聊洞见] 进程退出，清理资源...')
+  stopAllServices()
+  Config.stop()
+})
 
 export { apps }

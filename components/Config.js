@@ -1,5 +1,11 @@
 /**
  * 配置管理组件（支持热重载）
+ *
+ * 配置策略：
+ * 1. default_config.yaml 作为备份和模板
+ * 2. config.yaml 作为实际配置文件
+ * 3. 首次启动时，自动复制 default_config.yaml 为 config.yaml
+ * 4. 后续只读取 config.yaml，用户可直接修改完整配置
  */
 import chokidar from 'chokidar'
 import YAML from 'yaml'
@@ -25,29 +31,44 @@ class Config {
     const defaultConfigPath = join(pluginRoot, 'config/default_config.yaml')
     const userConfigPath = join(pluginRoot, 'config/config.yaml')
 
-    let config = {}
-
-    // 读取默认配置
-    if (fs.existsSync(defaultConfigPath)) {
-      const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
-      config = YAML.parse(defaultConfig).groupManager || {}
-    } else {
-      logger.warn('[群聊洞见] 默认配置文件不存在')
-      return config
+    // 检查 default_config.yaml 是否存在
+    if (!fs.existsSync(defaultConfigPath)) {
+      logger.error('[群聊洞见] 默认配置文件不存在: config/default_config.yaml')
+      return {}
     }
 
-    // 合并用户配置
-    if (fs.existsSync(userConfigPath)) {
+    // 如果 config.yaml 不存在，自动复制 default_config.yaml
+    if (!fs.existsSync(userConfigPath)) {
+      try {
+        logger.info('[群聊洞见] 首次启动，正在创建配置文件...')
+        fs.copyFileSync(defaultConfigPath, userConfigPath)
+        logger.mark('[群聊洞见] 配置文件已创建: config/config.yaml')
+        logger.mark('[群聊洞见] 请编辑 config/config.yaml 进行个性化配置')
+      } catch (err) {
+        logger.error(`[群聊洞见] 创建配置文件失败: ${err}`)
+        logger.warn('[群聊洞见] 将使用默认配置')
+        // 创建失败时读取默认配置
+        const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
+        this.config = YAML.parse(defaultConfig).groupManager || {}
+        return this.config
+      }
+    }
+
+    // 读取 config.yaml
+    try {
       const userConfig = fs.readFileSync(userConfigPath, 'utf8')
-      const userSettings = YAML.parse(userConfig).groupManager || {}
-      config = { ...config, ...userSettings }
-      logger.info('[群聊洞见] 已加载用户配置')
-    } else {
-      logger.info('[群聊洞见] 未找到用户配置，使用默认配置')
+      const parsedConfig = YAML.parse(userConfig)
+      this.config = parsedConfig.groupManager || {}
+      logger.info('[群聊洞见] 配置已加载')
+      return this.config
+    } catch (err) {
+      logger.error(`[群聊洞见] 配置文件解析失败: ${err}`)
+      logger.warn('[群聊洞见] 将使用默认配置')
+      // 解析失败时读取默认配置
+      const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
+      this.config = YAML.parse(defaultConfig).groupManager || {}
+      return this.config
     }
-
-    this.config = config
-    return config
   }
 
   /**

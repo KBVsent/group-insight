@@ -224,7 +224,7 @@ export default class RedisHelper {
   }
 
   /**
-   * 清除用户的艾特记录
+   * 清除用户的艾特记录（使用 multi 批量删除）
    * @param {string} groupId - 群号
    * @param {string} userId - 用户ID
    */
@@ -235,14 +235,24 @@ export default class RedisHelper {
       // 获取所有记录ID
       const recordIds = await redis.zRange(indexKey, 0, -1)
 
-      // 删除所有数据键
-      for (const recordId of recordIds) {
-        const dataKey = this.getAtDataKey(recordId)
-        await redis.del(dataKey)
+      if (recordIds.length === 0) {
+        // 删除索引键
+        await redis.del(indexKey)
+        logger.debug('[群聊洞见] 清除艾特记录成功: 0 条')
+        return 0
       }
 
+      // 使用 multi 批量删除数据键
+      const multi = redis.multi()
+      for (const recordId of recordIds) {
+        const dataKey = this.getAtDataKey(recordId)
+        multi.del(dataKey)
+      }
       // 删除索引键
-      await redis.del(indexKey)
+      multi.del(indexKey)
+
+      // 执行批量删除
+      await multi.exec()
 
       logger.debug(`[群聊洞见] 清除艾特记录成功: ${recordIds.length} 条`)
       return recordIds.length
@@ -253,11 +263,12 @@ export default class RedisHelper {
   }
 
   /**
-   * 清除所有艾特记录
+   * 清除所有艾特记录（使用 multi 批量删除）
    */
   async clearAllAtRecords() {
     try {
       let totalDeleted = 0
+      const multi = redis.multi()
 
       // 1. 清除所有索引键和对应的数据键
       const indexPattern = `${this.keyPrefix}:at:index:*`
@@ -267,22 +278,22 @@ export default class RedisHelper {
         // 获取所有记录ID
         const recordIds = await redis.zRange(indexKey, 0, -1)
 
-        // 删除所有数据键
+        // 批量删除所有数据键
         for (const recordId of recordIds) {
           const dataKey = this.getAtDataKey(recordId)
-          await redis.del(dataKey)
+          multi.del(dataKey)
           totalDeleted++
         }
 
         // 删除索引键
-        await redis.del(indexKey)
+        multi.del(indexKey)
       }
 
       // 2. 清除可能残留的旧格式数据键
       const dataPattern = `${this.keyPrefix}:at:data:*`
       const dataKeys = await redis.keys(dataPattern)
       for (const key of dataKeys) {
-        await redis.del(key)
+        multi.del(key)
       }
 
       // 3. 清除旧版本的艾特记录键（兼容性清理）
@@ -292,8 +303,11 @@ export default class RedisHelper {
         !key.includes(':index:') && !key.includes(':data:')
       )
       for (const key of oldAtKeys) {
-        await redis.del(key)
+        multi.del(key)
       }
+
+      // 执行批量删除
+      await multi.exec()
 
       logger.info(`[群聊洞见] 清除所有艾特记录成功: ${totalDeleted} 条`)
       return totalDeleted

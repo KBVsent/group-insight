@@ -2,7 +2,7 @@
  * 管理命令
  */
 import plugin from '../../../lib/plugins/plugin.js'
-import { Config, getMessageCollector, reinitializeServices } from '../components/index.js'
+import { Config, getMessageCollector } from '../components/index.js'
 
 export class AdminPlugin extends plugin {
   constructor() {
@@ -38,10 +38,6 @@ export class AdminPlugin extends plugin {
     // 初始化共享服务
     getMessageCollector()
 
-    // 监听配置变更并重新初始化服务
-    Config.onChange(async (newConfig) => {
-      await reinitializeServices(newConfig)
-    })
   }
 
   /**
