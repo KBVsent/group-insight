@@ -197,18 +197,20 @@ export class ReportPlugin extends plugin {
       return
     }
 
-    logger.mark(`[群聊洞见-报告] 开始执行定时报告任务 (白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
+    // 固定目标日期为任务触发时的"今天"，避免跨日边界问题
+    const targetDate = moment().format('YYYY-MM-DD')
+    logger.mark(`[群聊洞见-报告] 开始执行定时报告任务 (目标日期: ${targetDate}, 白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
 
     // 使用并发限制处理白名单群
     const results = await this.runWithConcurrency(
       whitelist,
       async (groupId) => {
         try {
-          // 获取今天的消息
-          const messages = await messageCollector.getMessages(groupId, 1)
+          // 获取目标日期的消息（使用固定日期，避免处理过程中跨日导致日期错误）
+          const messages = await messageCollector.getMessages(groupId, 1, targetDate)
 
           if (messages.length < minMessages) {
-            logger.debug(`[群聊洞见-报告] 群 ${groupId} 今日消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
+            logger.debug(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
             return { groupId, status: 'skipped', reason: 'insufficient_messages' }
           }
 
@@ -226,17 +228,16 @@ export class ReportPlugin extends plugin {
           }
 
           // 执行分析
-          logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成报告 (消息数: ${messages.length})`)
-          const today = moment().format('YYYY-MM-DD')
-          const analysisResults = await this.performAnalysis(messages, 1, groupId, today)
+          logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成 ${targetDate} 报告 (消息数: ${messages.length})`)
+          const analysisResults = await this.performAnalysis(messages, 1, groupId, targetDate)
 
           if (!analysisResults) {
             logger.warn(`[群聊洞见-报告] 群 ${groupId} 报告生成失败：分析失败`)
             return { groupId, status: 'failed', error: 'analysis_failed' }
           }
 
-          // 保存报告到 Redis
-          await messageCollector.redisHelper.saveReport(groupId, today, {
+          // 保存报告到 Redis（使用固定的目标日期）
+          await messageCollector.redisHelper.saveReport(groupId, targetDate, {
             stats: analysisResults.stats,
             topics: analysisResults.topics,
             goldenQuotes: analysisResults.goldenQuotes,
@@ -248,7 +249,7 @@ export class ReportPlugin extends plugin {
           // 设置冷却标记（防止定时任务后1小时内频繁手动触发）
           await this.setCooldown(groupId, 'scheduled', messages.length)
 
-          logger.mark(`[群聊洞见-报告] 群 ${groupId} 报告生成成功 (${messages.length} 条消息)`)
+          logger.mark(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 报告生成成功 (${messages.length} 条消息)`)
           return { groupId, status: 'success', messageCount: messages.length }
         } catch (err) {
           logger.error(`[群聊洞见-报告] 群 ${groupId} 定时报告异常: ${err}`)
@@ -519,36 +520,31 @@ export class ReportPlugin extends plugin {
       const match = e.msg.match(/(今天|昨天|前天|(\d{4}-\d{2}-\d{2}))/)
       let targetDate = moment().format('YYYY-MM-DD')
       let dateLabel = '今天'
-      let daysOffset = 0
 
       if (match) {
         if (match[1] === '昨天') {
           targetDate = moment().subtract(1, 'days').format('YYYY-MM-DD')
           dateLabel = '昨天'
-          daysOffset = 1
         } else if (match[1] === '前天') {
           targetDate = moment().subtract(2, 'days').format('YYYY-MM-DD')
           dateLabel = '前天'
-          daysOffset = 2
         } else if (match[2]) {
           const date = moment(match[2], 'YYYY-MM-DD', true)
           if (date.isValid()) {
             targetDate = date.format('YYYY-MM-DD')
             dateLabel = moment(targetDate).format('YYYY年MM月DD日')
-            daysOffset = moment().diff(date, 'days')
           } else {
             return this.reply('日期格式错误，请使用：YYYY-MM-DD（如 2024-11-01）', true)
           }
         } else if (match[1] === '今天') {
           dateLabel = '今天'
-          daysOffset = 0
         }
       }
 
       await this.reply(`正在强制生成${dateLabel}的群聊报告，请稍候...`)
 
-      // 获取指定日期的消息
-      const messages = await messageCollector.getMessages(e.group_id, 1, daysOffset)
+      // 获取指定日期的消息（直接传入目标日期）
+      const messages = await messageCollector.getMessages(e.group_id, 1, targetDate)
 
       if (messages.length === 0) {
         return this.reply(`${dateLabel}还没有消息，无法生成报告`, true)

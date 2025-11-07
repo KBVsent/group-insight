@@ -75,13 +75,16 @@ export default class RedisHelper {
    * 获取群消息历史
    * @param {string} groupId - 群号
    * @param {number} days - 查询天数 (1, 3, 7)
-   * @param {number} offset - 日期偏移（0=今天, 1=昨天, 2=前天）
+   * @param {string|null} targetDate - 目标日期 (YYYY-MM-DD)，不传则为今天
    */
-  async getMessages(groupId, days = 1, offset = 0) {
+  async getMessages(groupId, days = 1, targetDate = null) {
     const messages = []
 
+    // 使用固定的基准日期，避免跨日边界问题
+    const baseDate = targetDate ? moment(targetDate) : moment()
+
     for (let i = 0; i < days; i++) {
-      const date = moment().subtract(i + offset, 'days').format('YYYY-MM-DD')
+      const date = baseDate.clone().subtract(i, 'days').format('YYYY-MM-DD')
       const key = this.getMessageKey(groupId, date)
 
       const dayMessages = await redis.lRange(key, 0, -1)

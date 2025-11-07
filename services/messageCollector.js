@@ -355,9 +355,10 @@ export default class MessageCollector {
    * 获取群消息历史
    * @param {string} groupId - 群号
    * @param {number} days - 天数
+   * @param {string|null} targetDate - 目标日期 (YYYY-MM-DD)，不传则为今天
    */
-  async getMessages(groupId, days = 1, offset = 0) {
-    return await this.redisHelper.getMessages(groupId, days, offset)
+  async getMessages(groupId, days = 1, targetDate = null) {
+    return await this.redisHelper.getMessages(groupId, days, targetDate)
   }
 
   /**
