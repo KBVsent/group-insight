@@ -26,7 +26,7 @@ export class AtMePlugin extends plugin {
    */
   async init() {
     // 初始化共享服务（由 Services 模块统一管理）
-    getMessageCollector()
+    await getMessageCollector()
     logger.info('[群聊洞见-谁艾特我] 插件已初始化')
   }
 
@@ -34,7 +34,7 @@ export class AtMePlugin extends plugin {
    * 谁艾特我功能
    */
   async whoAtMe(e) {
-    const messageCollector = getMessageCollector()
+    const messageCollector = await getMessageCollector()
     if (!messageCollector) {
       return this.reply('消息收集功能未启用', true)
     }

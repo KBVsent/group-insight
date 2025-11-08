@@ -26,17 +26,20 @@ export class WordCloudPlugin extends plugin {
    */
   async init() {
     // 初始化共享服务（由 Services 模块统一管理）
-    getMessageCollector()
-    getWordCloudGenerator()
-
+    await Promise.all([
+      getMessageCollector(),
+      getWordCloudGenerator()
+    ])
   }
 
   /**
    * 生成词云
    */
   async generateWordCloud(e) {
-    const messageCollector = getMessageCollector()
-    const wordCloudGenerator = getWordCloudGenerator()
+    const [messageCollector, wordCloudGenerator] = await Promise.all([
+      getMessageCollector(),
+      getWordCloudGenerator()
+    ])
 
     if (!messageCollector || !wordCloudGenerator) {
       return this.reply('词云功能未就绪', true)

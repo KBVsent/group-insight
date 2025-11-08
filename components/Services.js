@@ -1,7 +1,8 @@
 /**
  * 共享服务管理
- * 确保所有服务实例在全局只初始化一次
+ * 使用 ServiceManager 确保优雅的服务生命周期管理
  */
+import { ServiceManager, SingletonServiceManager } from './ServiceManager.js'
 import MessageCollector from '../services/messageCollector.js'
 import WordCloudGenerator from '../services/wordCloudGenerator.js'
 import AIService from '../services/aiService.js'
@@ -12,178 +13,218 @@ import GoldenQuoteAnalyzer from '../services/analyzers/GoldenQuoteAnalyzer.js'
 import UserTitleAnalyzer from '../services/analyzers/UserTitleAnalyzer.js'
 import Config from './Config.js'
 
-// 单例服务实例
-let messageCollector = null
-let messageCollectorInitialized = false
-let wordCloudGenerator = null
-let aiService = null
-let aiServiceInitialized = false
-let statisticsService = null
-let activityVisualizer = null
-let topicAnalyzer = null
-let goldenQuoteAnalyzer = null
-let userTitleAnalyzer = null
-
 /**
- * 获取消息收集器实例
+ * MessageCollector 服务管理器
  */
-export function getMessageCollector() {
-  if (!messageCollectorInitialized) {
-    messageCollectorInitialized = true
+class MessageCollectorManager extends ServiceManager {
+  async _doInitialize() {
     const config = Config.get()
-    if (config?.messageCollection?.enabled !== false) {
-      messageCollector = new MessageCollector(config)
-      messageCollector.startCollecting()
-      // 日志由 startCollecting() 内部打印,这里不需要重复
+    if (config?.messageCollection?.enabled === false) {
+      logger.info('[群聊洞见] 消息收集已禁用')
+      return null
     }
+
+    const collector = new MessageCollector(config)
+    collector.startCollecting()
+    return collector
   }
-  return messageCollector
+
+  async stop() {
+    if (this.instance) {
+      this.instance.stopCollecting()
+    }
+    await super.stop()
+  }
 }
 
 /**
- * 获取词云生成器实例
+ * AI 服务管理器
  */
-export function getWordCloudGenerator() {
-  if (!wordCloudGenerator) {
+class AIServiceManager extends ServiceManager {
+  async _doInitialize() {
     const config = Config.get()
-    wordCloudGenerator = new WordCloudGenerator(config)
-  }
-  return wordCloudGenerator
-}
-
-/**
- * 获取 AI 服务实例
- */
-export function getAIService() {
-  if (!aiServiceInitialized) {
-    aiServiceInitialized = true
-    const config = Config.get()
-    // AI 服务是否启用：检查是否配置了 apiKey
     const aiConfig = config?.ai
-    const isAIEnabled = aiConfig && aiConfig.apiKey && aiConfig.apiKey.trim() !== ''
 
-    if (isAIEnabled) {
-      try {
-        // 传递 AI 配置对象（不是整个 config）
-        aiService = new AIService(aiConfig)
-        // 立即初始化，避免并发调用时的竞态条件
-        aiService.init().catch(err => {
-          logger.warn('[群聊洞见] AI 服务初始化失败:', err.message)
-          aiService = null
-        })
-      } catch (err) {
-        logger.warn('[群聊洞见] AI 服务初始化失败:', err.message)
-        aiService = null
-      }
-    } else {
-      logger.info('[群聊洞见] AI 服务未启用 (未配置 API Key)，AI 相关功能将不可用')
+    // 检查是否启用
+    const isAIEnabled = aiConfig && aiConfig.apiKey && aiConfig.apiKey.trim() !== ''
+    if (!isAIEnabled) {
+      logger.info('[群聊洞见] AI 服务未启用 (未配置 API Key)')
+      return null
     }
+
+    // 创建并初始化 AI 服务
+    const service = new AIService(aiConfig)
+    await service.init()
+    return service
   }
-  return aiService
 }
 
 /**
- * 获取统计服务实例
+ * WordCloudGenerator 服务管理器
  */
-export function getStatisticsService() {
-  if (!statisticsService) {
+class WordCloudGeneratorManager extends ServiceManager {
+  async _doInitialize() {
+    const config = Config.get()
+    return new WordCloudGenerator(config)
+  }
+}
+
+/**
+ * StatisticsService 服务管理器
+ */
+class StatisticsServiceManager extends ServiceManager {
+  async _doInitialize() {
     const config = Config.get()
     const statsConfig = {
       night_start_hour: config?.statistics?.night_start_hour || 0,
       night_end_hour: config?.statistics?.night_end_hour || 6
     }
-    statisticsService = new StatisticsService(statsConfig)
+    return new StatisticsService(statsConfig)
   }
-  return statisticsService
+}
+
+/**
+ * ActivityVisualizer 服务管理器
+ */
+class ActivityVisualizerManager extends ServiceManager {
+  async _doInitialize() {
+    const config = Config.get()
+    return new ActivityVisualizer(config?.analysis?.activity || {})
+  }
+}
+
+/**
+ * 创建分析器管理器类的工厂函数
+ */
+function createAnalyzerManagerClass(AnalyzerClass, configKey) {
+  return class extends ServiceManager {
+    async _doInitialize() {
+      // 获取 AI 服务管理器（从单例获取）
+      const aiServiceManager = SingletonServiceManager.getManager('AIService', AIServiceManager)
+
+      // 获取 AI 服务
+      const aiService = await aiServiceManager.getInstance()
+      if (!aiService) {
+        // AI 服务不可用，返回 null（会被标记为 DISABLED）
+        logger.debug(`[${this.name}] AI 服务不可用，分析器无法初始化`)
+        return null
+      }
+
+      // 获取配置
+      const config = Config.get()
+      const analysisConfig = {
+        llm_timeout: config?.ai?.llm_timeout || 100,
+        llm_retries: config?.ai?.llm_retries || 2,
+        llm_backoff: config?.ai?.llm_backoff || 2,
+        ...config?.analysis?.[configKey],
+        min_messages_threshold: config?.analysis?.min_messages_threshold || 20
+      }
+
+      return new AnalyzerClass(aiService, analysisConfig)
+    }
+  }
+}
+
+// 创建服务管理器单例
+const messageCollectorManager = SingletonServiceManager.getManager('MessageCollector', MessageCollectorManager)
+const aiServiceManager = SingletonServiceManager.getManager('AIService', AIServiceManager)
+const wordCloudGeneratorManager = SingletonServiceManager.getManager('WordCloudGenerator', WordCloudGeneratorManager)
+const statisticsServiceManager = SingletonServiceManager.getManager('StatisticsService', StatisticsServiceManager)
+const activityVisualizerManager = SingletonServiceManager.getManager('ActivityVisualizer', ActivityVisualizerManager)
+
+// 创建分析器管理器单例
+const topicAnalyzerManager = SingletonServiceManager.getManager(
+  'TopicAnalyzer',
+  createAnalyzerManagerClass(TopicAnalyzer, 'topic')
+)
+
+const goldenQuoteAnalyzerManager = SingletonServiceManager.getManager(
+  'GoldenQuoteAnalyzer',
+  createAnalyzerManagerClass(GoldenQuoteAnalyzer, 'goldenQuote')
+)
+
+const userTitleAnalyzerManager = SingletonServiceManager.getManager(
+  'UserTitleAnalyzer',
+  createAnalyzerManagerClass(UserTitleAnalyzer, 'userTitle')
+)
+
+/**
+ * 获取消息收集器实例
+ * @returns {Promise<MessageCollector|null>}
+ */
+export async function getMessageCollector() {
+  return await messageCollectorManager.getInstance()
+}
+
+/**
+ * 获取词云生成器实例
+ * @returns {Promise<WordCloudGenerator|null>}
+ */
+export async function getWordCloudGenerator() {
+  return await wordCloudGeneratorManager.getInstance()
+}
+
+/**
+ * 获取 AI 服务实例
+ * @returns {Promise<AIService|null>}
+ */
+export async function getAIService() {
+  return await aiServiceManager.getInstance()
+}
+
+/**
+ * 获取统计服务实例
+ * @returns {Promise<StatisticsService|null>}
+ */
+export async function getStatisticsService() {
+  return await statisticsServiceManager.getInstance()
 }
 
 /**
  * 获取活动可视化器实例
+ * @returns {Promise<ActivityVisualizer|null>}
  */
-export function getActivityVisualizer() {
-  if (!activityVisualizer) {
-    const config = Config.get()
-    activityVisualizer = new ActivityVisualizer(config?.analysis?.activity || {})
-  }
-  return activityVisualizer
+export async function getActivityVisualizer() {
+  return await activityVisualizerManager.getInstance()
 }
 
 /**
  * 获取话题分析器实例
+ * @returns {Promise<TopicAnalyzer|null>}
  */
-export function getTopicAnalyzer() {
-  if (!topicAnalyzer) {
-    const config = Config.get()
-    const aiSvc = getAIService()
-
-    // 如果 AI 服务未启用，不初始化分析器
-    if (!aiSvc) {
-      logger.debug('[群聊洞见] AI 服务未启用，跳过话题分析器初始化')
-      return null
-    }
-
-    const analysisConfig = {
-      llm_timeout: config?.ai?.llm_timeout || 100,
-      llm_retries: config?.ai?.llm_retries || 2,
-      llm_backoff: config?.ai?.llm_backoff || 2,
-      ...config?.analysis?.topic,
-      min_messages_threshold: config?.analysis?.min_messages_threshold || 20
-    }
-    topicAnalyzer = new TopicAnalyzer(aiSvc, analysisConfig)
+export async function getTopicAnalyzer() {
+  try {
+    return await topicAnalyzerManager.getInstance()
+  } catch (error) {
+    logger.debug(`[群聊洞见] 话题分析器不可用: ${error.message}`)
+    return null
   }
-  return topicAnalyzer
 }
 
 /**
  * 获取金句分析器实例
+ * @returns {Promise<GoldenQuoteAnalyzer|null>}
  */
-export function getGoldenQuoteAnalyzer() {
-  if (!goldenQuoteAnalyzer) {
-    const config = Config.get()
-    const aiSvc = getAIService()
-
-    // 如果 AI 服务未启用，不初始化分析器
-    if (!aiSvc) {
-      logger.debug('[群聊洞见] AI 服务未启用，跳过金句分析器初始化')
-      return null
-    }
-
-    const analysisConfig = {
-      llm_timeout: config?.ai?.llm_timeout || 100,
-      llm_retries: config?.ai?.llm_retries || 2,
-      llm_backoff: config?.ai?.llm_backoff || 2,
-      ...config?.analysis?.goldenQuote,
-      min_messages_threshold: config?.analysis?.min_messages_threshold || 20
-    }
-    goldenQuoteAnalyzer = new GoldenQuoteAnalyzer(aiSvc, analysisConfig)
+export async function getGoldenQuoteAnalyzer() {
+  try {
+    return await goldenQuoteAnalyzerManager.getInstance()
+  } catch (error) {
+    logger.debug(`[群聊洞见] 金句分析器不可用: ${error.message}`)
+    return null
   }
-  return goldenQuoteAnalyzer
 }
 
 /**
  * 获取用户称号分析器实例
+ * @returns {Promise<UserTitleAnalyzer|null>}
  */
-export function getUserTitleAnalyzer() {
-  if (!userTitleAnalyzer) {
-    const config = Config.get()
-    const aiSvc = getAIService()
-
-    // 如果 AI 服务未启用，不初始化分析器
-    if (!aiSvc) {
-      logger.debug('[群聊洞见] AI 服务未启用，跳过用户称号分析器初始化')
-      return null
-    }
-
-    const analysisConfig = {
-      llm_timeout: config?.ai?.llm_timeout || 100,
-      llm_retries: config?.ai?.llm_retries || 2,
-      llm_backoff: config?.ai?.llm_backoff || 2,
-      ...config?.analysis?.userTitle,
-      min_messages_threshold: config?.analysis?.min_messages_threshold || 20
-    }
-    userTitleAnalyzer = new UserTitleAnalyzer(aiSvc, analysisConfig)
+export async function getUserTitleAnalyzer() {
+  try {
+    return await userTitleAnalyzerManager.getInstance()
+  } catch (error) {
+    logger.debug(`[群聊洞见] 用户称号分析器不可用: ${error.message}`)
+    return null
   }
-  return userTitleAnalyzer
 }
 
 /**
@@ -192,28 +233,12 @@ export function getUserTitleAnalyzer() {
 export async function reinitializeServices(newConfig) {
   logger.info('[群聊洞见] 正在重新初始化服务...')
 
-  // 停止消息收集器
-  if (messageCollector) {
-    messageCollector.stopCollecting()
-    messageCollector = null
-  }
+  // 重置所有单例服务（包括分析器）
+  await SingletonServiceManager.resetAll()
 
-  // 重置所有服务
-  messageCollectorInitialized = false
-  wordCloudGenerator = null
-  aiService = null
-  aiServiceInitialized = false
-  statisticsService = null
-  activityVisualizer = null
-  topicAnalyzer = null
-  goldenQuoteAnalyzer = null
-  userTitleAnalyzer = null
-
-  // 重新初始化消息收集器
-  if (newConfig.messageCollection?.enabled !== false) {
-    messageCollector = new MessageCollector(newConfig)
-    messageCollector.startCollecting()
-    logger.info('[群聊洞见] 消息收集器已重新启动')
+  // 立即启动消息收集器（如果启用）
+  if (newConfig?.messageCollection?.enabled !== false) {
+    await getMessageCollector()
   }
 
   logger.info('[群聊洞见] 服务重新初始化完成')
@@ -222,19 +247,54 @@ export async function reinitializeServices(newConfig) {
 /**
  * 停止所有服务
  */
-export function stopAllServices() {
-  if (messageCollector) {
-    messageCollector.stopCollecting()
-    messageCollector = null
-  }
-  messageCollectorInitialized = false
-  wordCloudGenerator = null
-  aiService = null
-  aiServiceInitialized = false
-  statisticsService = null
-  activityVisualizer = null
-  topicAnalyzer = null
-  goldenQuoteAnalyzer = null
-  userTitleAnalyzer = null
+export async function stopAllServices() {
+  logger.info('[群聊洞见] 正在停止所有服务...')
+
+  // 停止所有单例服务（包括分析器）
+  await SingletonServiceManager.stopAll()
+
   logger.info('[群聊洞见] 所有服务已停止')
+}
+
+/**
+ * 获取所有服务状态
+ * @returns {Object} 服务状态信息
+ */
+export function getServicesStatus() {
+  // SingletonServiceManager 现在包含所有服务，包括分析器
+  return SingletonServiceManager.getStatus()
+}
+
+// 兼容性：提供同步包装函数，便于渐进式迁移
+// 这些函数会立即返回实例或null，不会等待初始化
+let syncCompatibilityWarned = false
+
+/**
+ * 同步获取消息收集器（兼容旧代码）
+ * @deprecated 请使用异步版本 getMessageCollector()
+ */
+export function getMessageCollectorSync() {
+  if (!syncCompatibilityWarned) {
+    logger.warn('[群聊洞见] 使用了同步获取服务的方法，建议改用异步版本')
+    syncCompatibilityWarned = true
+  }
+  // 如果服务已经就绪，直接返回
+  if (messageCollectorManager.state === 'ready') {
+    return messageCollectorManager.instance
+  }
+  // 触发异步初始化，但不等待
+  messageCollectorManager.getInstance().catch(() => {})
+  return null
+}
+
+/**
+ * 同步获取 AI 服务（兼容旧代码）
+ * @deprecated 请使用异步版本 getAIService()
+ */
+export function getAIServiceSync() {
+  if (aiServiceManager.state === 'ready') {
+    return aiServiceManager.instance
+  }
+  aiServiceManager.getInstance().catch(() => {})
+  return null
 }

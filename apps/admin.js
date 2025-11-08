@@ -36,8 +36,7 @@ export class AdminPlugin extends plugin {
    */
   async init() {
     // 初始化共享服务
-    getMessageCollector()
-
+    await getMessageCollector()
   }
 
   /**
@@ -48,7 +47,7 @@ export class AdminPlugin extends plugin {
       return this.reply('此功能仅支持群聊使用', true)
     }
 
-    const messageCollector = getMessageCollector()
+    const messageCollector = await getMessageCollector()
     if (!messageCollector) {
       return this.reply('消息收集功能未启用', true)
     }
@@ -66,7 +65,7 @@ export class AdminPlugin extends plugin {
    * 清除所有艾特记录（仅主人）
    */
   async clearAllAtRecords(e) {
-    const messageCollector = getMessageCollector()
+    const messageCollector = await getMessageCollector()
     if (!messageCollector) {
       return this.reply('消息收集功能未启用', true)
     }
@@ -87,7 +86,7 @@ export class AdminPlugin extends plugin {
     }
 
     // 获取消息收集器
-    const messageCollector = getMessageCollector()
+    const messageCollector = await getMessageCollector()
     if (!messageCollector) {
       return this.reply('消息收集功能未启用', true)
     }

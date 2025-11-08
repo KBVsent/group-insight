@@ -58,15 +58,22 @@ export class ReportPlugin extends plugin {
     const config = Config.get()
 
     // 初始化共享服务（由 Services 模块统一管理）
-    getMessageCollector()
-    const aiService = getAIService()
-    getStatisticsService()
-    getActivityVisualizer()
+    // 使用 Promise.all 并行初始化，提高效率
+    const [messageCollector, aiService, statisticsService, activityVisualizer] = await Promise.all([
+      getMessageCollector(),
+      getAIService(),
+      getStatisticsService(),
+      getActivityVisualizer()
+    ])
 
     // 初始化分析器（如果 AI 服务可用）
-    getTopicAnalyzer()
-    getGoldenQuoteAnalyzer()
-    getUserTitleAnalyzer()
+    if (aiService) {
+      await Promise.all([
+        getTopicAnalyzer(),
+        getGoldenQuoteAnalyzer(),
+        getUserTitleAnalyzer()
+      ])
+    }
 
     // 显示功能状态
     const enabledFeatures = []
@@ -178,7 +185,7 @@ export class ReportPlugin extends plugin {
    * 定时任务：每天23:59生成群聊报告（带并发控制）
    */
   async scheduledReport() {
-    const messageCollector = getMessageCollector()
+    const messageCollector = await getMessageCollector()
     if (!messageCollector) {
       logger.warn('[群聊洞见-报告] 定时报告功能未就绪')
       return
@@ -299,8 +306,8 @@ export class ReportPlugin extends plugin {
    * 查询/生成群聊报告
    */
   async generateReport(e) {
-    const messageCollector = getMessageCollector()
-    const aiService = getAIService()
+    const messageCollector = await getMessageCollector()
+    const aiService = await getAIService()
 
     if (!messageCollector) {
       return this.reply('报告功能未就绪', true)
@@ -508,8 +515,8 @@ export class ReportPlugin extends plugin {
    * 强制生成群聊报告（主人专用）
    */
   async forceGenerateReport(e) {
-    const messageCollector = getMessageCollector()
-    const aiService = getAIService()
+    const messageCollector = await getMessageCollector()
+    const aiService = await getAIService()
 
     if (!messageCollector) {
       return this.reply('报告功能未就绪', true)
@@ -614,10 +621,12 @@ export class ReportPlugin extends plugin {
   async performAnalysis(messages, days = 1, groupId = null, date = null) {
     try {
       const config = Config.get()
-      const statisticsService = getStatisticsService()
-      const topicAnalyzer = getTopicAnalyzer()
-      const goldenQuoteAnalyzer = getGoldenQuoteAnalyzer()
-      const userTitleAnalyzer = getUserTitleAnalyzer()
+      const [statisticsService, topicAnalyzer, goldenQuoteAnalyzer, userTitleAnalyzer] = await Promise.all([
+        getStatisticsService(),
+        getTopicAnalyzer(),
+        getGoldenQuoteAnalyzer(),
+        getUserTitleAnalyzer()
+      ])
       const maxMessages = config.ai?.maxMessages || 1000
       const contextOverlap = 50 // 上下文重叠消息数
 
@@ -875,11 +884,11 @@ export class ReportPlugin extends plugin {
   async renderReport(analysisResults, options) {
     try {
       const config = Config.get()
-      const activityVisualizer = getActivityVisualizer()
+      const activityVisualizer = await getActivityVisualizer()
       const { stats, topics, goldenQuotes, userTitles } = analysisResults
 
       // 生成活跃度图表 HTML
-      const activityChart = config?.analysis?.activity?.enabled !== false
+      const activityChart = config?.analysis?.activity?.enabled !== false && activityVisualizer
         ? activityVisualizer.generateChart(stats.hourly)
         : ''
 
