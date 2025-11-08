@@ -35,7 +35,7 @@ try {
     try {
       const mod = await import(`./apps/${file}`)
       Object.assign(apps, mod)
-      logger.info(`[群聊洞见] 已加载: apps/${file}`)
+      logger.debug(`[群聊洞见] 已加载: apps/${file}`)
     } catch (err) {
       logger.error(`[群聊洞见] 加载 apps/${file} 失败:`, err)
     }

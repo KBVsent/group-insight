@@ -30,9 +30,9 @@ export default class MessageCollector {
     this.isCollecting = false
     this.handler = null  // 保存处理器引用，用于移除监听器
 
-    logger.info(`[群聊洞见] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 上下文消息: ${this.contextMessageCount}`)
+    logger.debug(`[群聊洞见] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 上下文消息: ${this.contextMessageCount}`)
     if (this.whitelist.length > 0) {
-      logger.info(`[群聊洞见] 定时总结白名单: ${this.whitelist.length} 个群`)
+      logger.debug(`[群聊洞见] 定时总结白名单: ${this.whitelist.length} 个群`)
     }
   }
 
@@ -58,7 +58,7 @@ export default class MessageCollector {
     Bot.on('message.group', this.handler)
     this.isCollecting = true
 
-    logger.info('[群聊洞见] 消息收集器已启动')
+    logger.debug('[群聊洞见] 消息收集器已启动')
   }
 
   /**
@@ -73,7 +73,7 @@ export default class MessageCollector {
       Bot.off('message.group', this.handler)
       this.handler = null
       this.isCollecting = false
-      logger.info('[群聊洞见] 消息收集器已停止')
+      logger.debug('[群聊洞见] 消息收集器已停止')
     } catch (err) {
       logger.error(`[群聊洞见] 停止收集器时发生错误: ${err}`)
     }

@@ -27,7 +27,7 @@ export class AtMePlugin extends plugin {
   async init() {
     // 初始化共享服务（由 Services 模块统一管理）
     await getMessageCollector()
-    logger.info('[群聊洞见-谁艾特我] 插件已初始化')
+    logger.debug('[群聊洞见-谁艾特我] 插件已初始化')
   }
 
   /**

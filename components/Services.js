@@ -20,7 +20,7 @@ class MessageCollectorManager extends ServiceManager {
   async _doInitialize() {
     const config = Config.get()
     if (config?.messageCollection?.enabled === false) {
-      logger.info('[群聊洞见] 消息收集已禁用')
+      logger.debug('[群聊洞见] 消息收集已禁用')
       return null
     }
 
@@ -48,7 +48,7 @@ class AIServiceManager extends ServiceManager {
     // 检查是否启用
     const isAIEnabled = aiConfig && aiConfig.apiKey && aiConfig.apiKey.trim() !== ''
     if (!isAIEnabled) {
-      logger.info('[群聊洞见] AI 服务未启用 (未配置 API Key)')
+      logger.debug('[群聊洞见] AI 服务未启用 (未配置 API Key)')
       return null
     }
 
@@ -231,7 +231,7 @@ export async function getUserTitleAnalyzer() {
  * 重新初始化所有服务（配置变更时调用）
  */
 export async function reinitializeServices(newConfig) {
-  logger.info('[群聊洞见] 正在重新初始化服务...')
+  logger.debug('[群聊洞见] 正在重新初始化服务...')
 
   // 重置所有单例服务（包括分析器）
   await SingletonServiceManager.resetAll()
@@ -241,19 +241,19 @@ export async function reinitializeServices(newConfig) {
     await getMessageCollector()
   }
 
-  logger.info('[群聊洞见] 服务重新初始化完成')
+  logger.debug('[群聊洞见] 服务重新初始化完成')
 }
 
 /**
  * 停止所有服务
  */
 export async function stopAllServices() {
-  logger.info('[群聊洞见] 正在停止所有服务...')
+  logger.debug('[群聊洞见] 正在停止所有服务...')
 
   // 停止所有单例服务（包括分析器）
   await SingletonServiceManager.stopAll()
 
-  logger.info('[群聊洞见] 所有服务已停止')
+  logger.debug('[群聊洞见] 所有服务已停止')
 }
 
 /**

@@ -46,7 +46,7 @@ export default class AIService {
       }
 
       this.initialized = true
-      logger.info(`[群聊洞见] AI 服务初始化成功，提供商: ${this.provider}`)
+      logger.debug(`[群聊洞见] AI 服务初始化成功，提供商: ${this.provider}`)
       return true
     } catch (err) {
       logger.error(`[群聊洞见] AI 服务初始化失败: ${err}`)

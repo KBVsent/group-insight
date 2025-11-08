@@ -59,7 +59,7 @@ class Config {
       const userConfig = fs.readFileSync(userConfigPath, 'utf8')
       const parsedConfig = YAML.parse(userConfig)
       this.config = parsedConfig.groupManager || {}
-      logger.info('[群聊洞见] 配置已加载')
+      logger.debug('[群聊洞见] 配置已加载')
       return this.config
     } catch (err) {
       logger.error(`[群聊洞见] 配置文件解析失败: ${err}`)
@@ -114,7 +114,7 @@ class Config {
         }
       })
 
-      logger.info('[群聊洞见] 配置文件热重载已启用')
+      logger.debug('[群聊洞见] 配置文件热重载已启用')
     }
   }
 
@@ -132,7 +132,7 @@ class Config {
     if (this.watcher) {
       this.watcher.close()
       this.watcher = null
-      logger.info('[群聊洞见] 配置监听已停止')
+      logger.debug('[群聊洞见] 配置监听已停止')
     }
   }
 

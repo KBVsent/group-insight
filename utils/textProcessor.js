@@ -40,7 +40,7 @@ export default class TextProcessor {
       this.stopwords = new Set(stopwords)
 
       this.initialized = true
-      logger.info('[群聊洞见] 文本处理器初始化成功 (jieba-wasm)')
+      logger.debug('[群聊洞见] 文本处理器初始化成功 (jieba-wasm)')
     } catch (err) {
       logger.error(`[群聊洞见] 文本处理器初始化失败: ${err}`)
       logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')

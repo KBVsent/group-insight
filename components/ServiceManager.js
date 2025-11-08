@@ -54,7 +54,7 @@ export class ServiceManager {
       case ServiceState.FAILED:
         // 检查是否可以重试
         if (this.retryCount < this.maxRetries) {
-          logger.info(`[${this.name}] 尝试重新初始化 (第${this.retryCount + 1}次)`)
+          logger.debug(`[${this.name}] 尝试重新初始化 (第${this.retryCount + 1}次)`)
           return this.initialize()
         }
         logger.debug(`[${this.name}] 服务初始化失败，已达最大重试次数`)
@@ -93,7 +93,7 @@ export class ServiceManager {
         this.instance = null
         this.lastError = null
         this.retryCount = 0
-        logger.info(`[${this.name}] 服务已禁用`)
+        logger.debug(`[${this.name}] 服务已禁用`)
         return null
       }
 
@@ -101,7 +101,7 @@ export class ServiceManager {
       this.state = ServiceState.READY
       this.lastError = null
       this.retryCount = 0
-      logger.info(`[${this.name}] 服务初始化成功`)
+      logger.debug(`[${this.name}] 服务初始化成功`)
       return instance
     } catch (error) {
       this.state = ServiceState.FAILED
