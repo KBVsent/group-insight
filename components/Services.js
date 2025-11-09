@@ -264,37 +264,3 @@ export function getServicesStatus() {
   // SingletonServiceManager 现在包含所有服务，包括分析器
   return SingletonServiceManager.getStatus()
 }
-
-// 兼容性：提供同步包装函数，便于渐进式迁移
-// 这些函数会立即返回实例或null，不会等待初始化
-let syncCompatibilityWarned = false
-
-/**
- * 同步获取消息收集器（兼容旧代码）
- * @deprecated 请使用异步版本 getMessageCollector()
- */
-export function getMessageCollectorSync() {
-  if (!syncCompatibilityWarned) {
-    logger.warn('[群聊洞见] 使用了同步获取服务的方法，建议改用异步版本')
-    syncCompatibilityWarned = true
-  }
-  // 如果服务已经就绪，直接返回
-  if (messageCollectorManager.state === 'ready') {
-    return messageCollectorManager.instance
-  }
-  // 触发异步初始化，但不等待
-  messageCollectorManager.getInstance().catch(() => {})
-  return null
-}
-
-/**
- * 同步获取 AI 服务（兼容旧代码）
- * @deprecated 请使用异步版本 getAIService()
- */
-export function getAIServiceSync() {
-  if (aiServiceManager.state === 'ready') {
-    return aiServiceManager.instance
-  }
-  aiServiceManager.getInstance().catch(() => {})
-  return null
-}

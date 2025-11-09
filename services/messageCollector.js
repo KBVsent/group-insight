@@ -658,8 +658,8 @@ export default class MessageCollector {
       }
 
       // 并行分析话题和金句（传递轻量级 stats 以获取 user_id）
-      const topicAnalyzer = getTopicAnalyzer()
-      const goldenQuoteAnalyzer = getGoldenQuoteAnalyzer()
+      const topicAnalyzer = await getTopicAnalyzer()
+      const goldenQuoteAnalyzer = await getGoldenQuoteAnalyzer()
 
       const [topicResult, quoteResult] = await Promise.all([
         topicAnalyzer?.analyze(messagesToAnalyze, stats),
