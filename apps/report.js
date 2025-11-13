@@ -57,8 +57,7 @@ export class ReportPlugin extends plugin {
   async init() {
     const config = Config.get()
 
-    // 初始化共享服务（由 Services 模块统一管理）
-    // 使用 Promise.all 并行初始化，提高效率
+    // 初始化共享服务
     const [messageCollector, aiService, statisticsService, activityVisualizer] = await Promise.all([
       getMessageCollector(),
       getAIService(),
@@ -632,7 +631,7 @@ export class ReportPlugin extends plugin {
 
       logger.info(`[群聊洞见-报告] 开始增强分析 (消息数: ${messages.length})`)
 
-      // 1. 基础统计分析（始终全量计算）
+      // 1. 基础统计分析
       const stats = statisticsService.analyze(messages)
       logger.info(`[群聊洞见-报告] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
 

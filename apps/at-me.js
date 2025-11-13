@@ -70,8 +70,8 @@ export class AtMePlugin extends plugin {
           // 添加灰色标注
           contextMsgContent.push('💬 [前文]: ')
 
-          // 添加上下文消息文本
-          if (ctxMsg.message) {
+          // 添加上下文消息文本（过滤占位符）
+          if (ctxMsg.message && ctxMsg.message !== '[表情]') {
             contextMsgContent.push(ctxMsg.message)
           }
 
@@ -105,7 +105,7 @@ export class AtMePlugin extends plugin {
           msgList.push({
             message: contextMsgContent,
             user_id: record.user_id,
-            nickname: `${record.nickname} [前文]`,
+            nickname: `${record.nickname}`,
             time: ctxMsg.time
           })
         }
@@ -206,7 +206,7 @@ export class AtMePlugin extends plugin {
           msgList.push({
             message: nextMsgContent,
             user_id: record.user_id,
-            nickname: `${record.nickname} [后文]`,
+            nickname: `${record.nickname}`,
             time: nextMsg.time
           })
         }
