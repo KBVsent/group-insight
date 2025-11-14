@@ -50,22 +50,15 @@ export default class StatisticsService {
         totalReplies++
       }
 
-      // 表情统计（基础）
-      if (msg.faces) {
-        if (typeof msg.faces === 'object' && msg.faces.total !== undefined) {
-          totalEmojis += msg.faces.total
-          emojiStats.face += msg.faces.face?.length || 0
-          emojiStats.mface += msg.faces.mface?.length || 0
-          if (Array.isArray(msg.faces.emoji)) {
-            emojiStats.emoji += msg.faces.emoji.reduce((sum, count) => sum + count, 0)
-          }
-          emojiStats.total += msg.faces.total
-        } else if (Array.isArray(msg.faces)) {
-          const faceCount = msg.faces.length
-          totalEmojis += faceCount
-          emojiStats.face += faceCount
-          emojiStats.total += faceCount
+      // 表情统计（faces 格式：{ face: [], mface: [], emoji: [], total: 0 }）
+      if (msg.faces && msg.faces.total !== undefined) {
+        totalEmojis += msg.faces.total
+        emojiStats.face += msg.faces.face?.length || 0
+        emojiStats.mface += msg.faces.mface?.length || 0
+        if (Array.isArray(msg.faces.emoji)) {
+          emojiStats.emoji += msg.faces.emoji.reduce((sum, count) => sum + count, 0)
         }
+        emojiStats.total += msg.faces.total
       }
 
       // 小时分布统计
@@ -91,12 +84,8 @@ export default class StatisticsService {
       userStat.hourlyDistribution[hour]++
 
       // 用户表情统计
-      if (msg.faces) {
-        if (typeof msg.faces === 'object' && msg.faces.total !== undefined) {
-          userStat.emojiCount += msg.faces.total
-        } else if (Array.isArray(msg.faces)) {
-          userStat.emojiCount += msg.faces.length
-        }
+      if (msg.faces && msg.faces.total !== undefined) {
+        userStat.emojiCount += msg.faces.total
       }
 
       // 用户回复统计

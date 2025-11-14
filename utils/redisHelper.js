@@ -273,7 +273,7 @@ export default class RedisHelper {
       let totalDeleted = 0
       const multi = redis.multi()
 
-      // 1. 清除所有索引键和对应的数据键
+      // 清除所有索引键和对应的数据键
       const indexPattern = `${this.keyPrefix}:at:index:*`
       const indexKeys = await redis.keys(indexPattern)
 
@@ -290,23 +290,6 @@ export default class RedisHelper {
 
         // 删除索引键
         multi.del(indexKey)
-      }
-
-      // 2. 清除可能残留的旧格式数据键
-      const dataPattern = `${this.keyPrefix}:at:data:*`
-      const dataKeys = await redis.keys(dataPattern)
-      for (const key of dataKeys) {
-        multi.del(key)
-      }
-
-      // 3. 清除旧版本的艾特记录键（兼容性清理）
-      const oldPattern = `${this.keyPrefix}:at:*`
-      const oldKeys = await redis.keys(oldPattern)
-      const oldAtKeys = oldKeys.filter(key =>
-        !key.includes(':index:') && !key.includes(':data:')
-      )
-      for (const key of oldAtKeys) {
-        multi.del(key)
       }
 
       // 执行批量删除
