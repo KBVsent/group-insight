@@ -507,6 +507,49 @@
       margin-right: 6px;
     }
 
+    /* 版权信息样式 */
+    .copyright {
+      margin-top: 15px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* 渐变文字特效 - 紫色渐变 */
+    .gradient-text {
+      background: linear-gradient(to right, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Aqua 色渐变 - 用于時壹 */
+    .gradient-aqua {
+      background: linear-gradient(to right, #00d4ff, #00bfa5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .copyright .heart-icon {
+      color: #ff6b9d;
+      animation: heartbeat 1.5s ease-in-out infinite;
+      font-size: 14px;
+      filter: drop-shadow(0 0 3px rgba(255, 107, 157, 0.6));
+      margin-left: 2px;
+    }
+
+    @keyframes heartbeat {
+      0%, 100% { transform: scale(1); }
+      25% { transform: scale(1.2); }
+      50% { transform: scale(1); }
+    }
+
     /* 移动端适配 */
     @media (max-width: 768px) {
       body {
@@ -677,6 +720,16 @@
       <p><i class="fas fa-microchip"></i> Token 使用: Prompt {{tokenUsage.prompt}} + Completion {{tokenUsage.completion}} = Total {{tokenUsage.total}}</p>
       {{/if}}
       <p><i class="fas fa-circle-info"></i> 本报告根据Little AI心情生成,看一下就好</p>
+      <div class="copyright">
+        <span>Created By</span>
+        <span>TRSS-Yunzai</span>
+        <span>&</span>
+        <span class="gradient-text">group-insight</span>
+        <span>&</span>
+        <span class="gradient-aqua">時壹</span>
+        <span>With</span>
+        <i class="fas fa-heart heart-icon"></i>
+      </div>
     </div>
   </div>
 </body>

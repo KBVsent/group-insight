@@ -68,6 +68,52 @@ body {
   border-top: 1px solid #E4E7EB;
 }
 
+.footer p {
+  margin: 5px 0;
+}
+
+/* 版权信息样式 */
+.copyright {
+  margin-top: 15px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #7D8694;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 渐变文字特效 - 紫色渐变 */
+.gradient-text {
+  background: linear-gradient(to right, #5B7FFF, #764ba2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Aqua 色渐变 - 用于時壹 */
+.gradient-aqua {
+  background: linear-gradient(to right, #00d4ff, #00bfa5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.copyright .heart-icon {
+  color: #ff6b9d;
+  animation: heartbeat 1.5s ease-in-out infinite;
+  font-size: 14px;
+  filter: drop-shadow(0 0 3px rgba(255, 107, 157, 0.6));
+  margin-left: 2px;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  25% { transform: scale(1.2); }
+  50% { transform: scale(1); }
+}
+
 @media (max-width: 768px) {
   .title {
     font-size: 28px;
