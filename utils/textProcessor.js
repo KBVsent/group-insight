@@ -6,6 +6,7 @@
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
+import Config from '../components/Config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -15,6 +16,7 @@ export default class TextProcessor {
     this.jieba = null
     this.stopwords = new Set()
     this.initialized = false
+    this.config = null
   }
 
   /**
@@ -26,11 +28,12 @@ export default class TextProcessor {
     try {
       // 动态导入 jieba-wasm（需要先安装）
       const jiebaWasm = await import('jieba-wasm')
-      const { cut } = jiebaWasm
+      const { cut, tag } = jiebaWasm
 
       // 创建 API 适配器包装器,确保与原 nodejieba API 兼容
       this.jieba = {
-        cut: (text) => cut(text, true)  // 第二个参数为 true 启用 HMM 模式,提高分词准确度
+        cut: (text) => cut(text, true),  // 第二个参数为 true 启用 HMM 模式,提高分词准确度
+        tag: (text) => tag(text, true)   // 词性标注功能
       }
 
       // 加载停用词
@@ -39,13 +42,48 @@ export default class TextProcessor {
       const stopwords = JSON.parse(stopwordsData)
       this.stopwords = new Set(stopwords)
 
+      // 加载配置
+      this.config = Config.get()
+
       this.initialized = true
-      logger.debug('[群聊洞见] 文本处理器初始化成功 (jieba-wasm)')
+      logger.debug('[群聊洞见] 文本处理器初始化成功 (jieba-wasm + 词性标注)')
     } catch (err) {
       logger.error(`[群聊洞见] 文本处理器初始化失败: ${err}`)
       logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
       this.initialized = false
     }
+  }
+
+  /**
+   * 根据配置获取要过滤的词性列表
+   * jieba 词性标注说明：
+   * u - 助词（的、了、着、过、等）
+   * y - 语气词（啊、吗、呢、吧、呀）
+   * d - 副词（很、太、非常、都、就）
+   * c - 连词（和、与、或、但是、因为）
+   * r - 代词（我、你、他、这、那）
+   * q - 量词（个、些、点、下、次）
+   * t - 时间词（现在、今天、刚才、马上）
+   * f - 方位词（上、下、里、外、中）
+   * m - 数词（一、二、三、几、多）
+   * @returns {Set} 要过滤的词性集合
+   */
+  getFilterPOSList() {
+    const filterStrength = this.config?.wordCloud?.filterStrength || 'standard'
+
+    // 词性过滤规则
+    const posRules = {
+      // 宽松模式：仅过滤助词和语气词
+      loose: new Set(['u', 'y']),
+
+      // 标准模式：+ 副词、连词、代词（推荐）
+      standard: new Set(['u', 'y', 'd', 'c', 'r']),
+
+      // 严格模式：+ 量词、时间词、方位词、数词
+      strict: new Set(['u', 'y', 'd', 'c', 'r', 'q', 't', 'f', 'm'])
+    }
+
+    return posRules[filterStrength] || posRules.standard
   }
 
   /**
@@ -81,16 +119,28 @@ export default class TextProcessor {
     }
 
     try {
-      const words = this.jieba.cut(text)
-      return words.filter(word => {
-        // 过滤长度不足的词
-        if (word.length < minLength) return false
-        // 过滤停用词
-        if (this.stopwords.has(word)) return false
-        // 只保留中文词汇
-        if (!/[\u4e00-\u9fa5]/.test(word)) return false
-        return true
-      })
+      // 使用词性标注进行分词（返回 [{word, tag}, ...] 格式）
+      const taggedWords = this.jieba.tag(text)
+      const filterPOS = this.getFilterPOSList()
+
+      // 过滤规则（四层过滤）
+      return taggedWords
+        .filter(({ word, tag }) => {
+          // 1. 过滤长度不足的词
+          if (word.length < minLength) return false
+
+          // 2. 过滤停用词（保留原有机制）
+          if (this.stopwords.has(word)) return false
+
+          // 3. 只保留中文词汇
+          if (!/[\u4e00-\u9fa5]/.test(word)) return false
+
+          // 4. 基于词性过滤（新增）
+          if (filterPOS.has(tag)) return false
+
+          return true
+        })
+        .map(({ word }) => word) // 仅返回词汇，去除词性标签
     } catch (err) {
       logger.error(`[群聊洞见] 分词失败: ${err}`)
       return this.simpleCut(text, minLength)
