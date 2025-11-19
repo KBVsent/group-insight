@@ -372,7 +372,6 @@ export class ReportPlugin extends plugin {
 
           const img = await this.renderReport(report, {
             groupName,
-            provider: aiService?.provider || 'AI',
             model: aiService?.model || '',
             tokenUsage: report.tokenUsage,
             date: queryDate
@@ -433,7 +432,6 @@ export class ReportPlugin extends plugin {
           const savedReport = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
           const img = await this.renderReport(savedReport || analysisResults, {
             groupName,
-            provider: aiService?.provider || 'AI',
             model: aiService?.model || '',
             tokenUsage: (savedReport || analysisResults).tokenUsage,
             date: queryDate
@@ -463,7 +461,6 @@ export class ReportPlugin extends plugin {
         // 渲染报告
         const img = await this.renderReport(report, {
           groupName,
-          provider: aiService?.provider || 'AI',
           model: aiService?.model || '',
           tokenUsage: report.tokenUsage,
           date: queryDate
@@ -593,7 +590,6 @@ export class ReportPlugin extends plugin {
       const savedReport = await messageCollector.redisHelper.getReport(e.group_id, targetDate)
       const img = await this.renderReport(savedReport || analysisResults, {
         groupName,
-        provider: aiService?.provider || 'AI',
         model: aiService?.model || '',
         tokenUsage: (savedReport || analysisResults).tokenUsage,
         date: targetDate
@@ -909,7 +905,6 @@ export class ReportPlugin extends plugin {
       } : null
 
       const templateData = {
-        provider: options.provider === 'claude' ? 'Claude' : options.provider === 'openai' ? 'OpenAI' : options.provider || 'AI',
         model: options.model || '',
         groupName: options.groupName || '未知群聊',
 
