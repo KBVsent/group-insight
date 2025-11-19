@@ -3,8 +3,6 @@
  */
 import plugin from '../../../lib/plugins/plugin.js'
 import moment from 'moment'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import puppeteer from '../../../lib/puppeteer/puppeteer.js'
 import {
   Config,
@@ -16,10 +14,7 @@ import {
   getGoldenQuoteAnalyzer,
   getUserTitleAnalyzer
 } from '../components/index.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const pluginRoot = join(__dirname, '..')
+import { RESOURCES_DIR, SUMMARY_TEMPLATE_PATH } from '#paths'
 
 export class ReportPlugin extends plugin {
   constructor() {
@@ -930,12 +925,12 @@ export class ReportPlugin extends plugin {
         createTime: analysisResults.savedAt ? moment(analysisResults.savedAt).format('YYYY-MM-DD HH:mm:ss') : moment().format('YYYY-MM-DD HH:mm:ss'),
         tokenUsage,
 
-        pluResPath: join(pluginRoot, 'resources') + '/'
+        pluResPath: RESOURCES_DIR + '/'
       }
 
       // 渲染群聊总结报告
       const img = await puppeteer.screenshot('group-insight', {
-        tplFile: join(pluginRoot, 'resources/summary/index.html'),
+        tplFile: SUMMARY_TEMPLATE_PATH,
         imgType,
         quality,
         ...templateData

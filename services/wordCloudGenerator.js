@@ -4,13 +4,9 @@
  */
 
 import moment from 'moment'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 import puppeteer from '../../../lib/puppeteer/puppeteer.js'
 import TextProcessor from '../utils/textProcessor.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+import { WORDCLOUD_TEMPLATE_PATH, PLUGIN_ROOT } from '#paths'
 
 export default class WordCloudGenerator {
   constructor(config) {
@@ -89,7 +85,6 @@ export default class WordCloudGenerator {
       })
 
       // 准备模板数据
-      const pluginPath = join(__dirname, '..')
       const templateData = {
         groupName,
         timeRange: this.getTimeRangeText(days),
@@ -99,12 +94,12 @@ export default class WordCloudGenerator {
         width,
         height,
         backgroundColor,
-        pluResPath: join(pluginPath, 'resources') + '/'
+        pluResPath: PLUGIN_ROOT + '/resources/'
       }
 
       // 渲染模板（使用高质量参数）
       const img = await puppeteer.screenshot('group-insight-wordcloud', {
-        tplFile: join(pluginPath, 'resources/wordcloud/index.html'),
+        tplFile: WORDCLOUD_TEMPLATE_PATH,
         imgType,
         quality,
         ...templateData

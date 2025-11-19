@@ -3,13 +3,9 @@
  * 提供分词、过滤停用词、统计词频等功能
  */
 
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 import fs from 'fs'
 import Config from '../components/Config.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+import { STOPWORDS_PATH } from '#paths'
 
 export default class TextProcessor {
   constructor() {
@@ -37,8 +33,7 @@ export default class TextProcessor {
       }
 
       // 加载停用词
-      const stopwordsPath = join(__dirname, '../config/stopwords.json')
-      const stopwordsData = fs.readFileSync(stopwordsPath, 'utf8')
+      const stopwordsData = fs.readFileSync(STOPWORDS_PATH, 'utf8')
       const stopwords = JSON.parse(stopwordsData)
       this.stopwords = new Set(stopwords)
 

@@ -10,12 +10,13 @@
 import chokidar from 'chokidar'
 import YAML from 'yaml'
 import fs from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const pluginRoot = join(__dirname, '..')
+import chalk from 'chalk'
+import {
+  USER_CONFIG_PATH,
+  DEFAULT_CONFIG_PATH,
+  CONFIG_TEMPLATE_PATH
+} from '#paths'
+import { errorLogger } from '#lib'
 
 class Config {
   constructor() {
@@ -70,15 +71,13 @@ class Config {
 
   /**
    * 迁移配置文件
-   * @param {string} userConfigPath - 用户配置文件路径
-   * @param {string} defaultConfigPath - 默认配置文件路径
    * @returns {boolean} 是否执行了迁移
    */
-  migrateConfig(userConfigPath, defaultConfigPath) {
+  migrateConfig() {
     try {
       // 读取两个配置文件
-      const userConfigText = fs.readFileSync(userConfigPath, 'utf8')
-      const defaultConfigText = fs.readFileSync(defaultConfigPath, 'utf8')
+      const userConfigText = fs.readFileSync(USER_CONFIG_PATH, 'utf8')
+      const defaultConfigText = fs.readFileSync(DEFAULT_CONFIG_PATH, 'utf8')
 
       const userConfig = YAML.parse(userConfigText)
       const defaultConfig = YAML.parse(defaultConfigText)
@@ -92,7 +91,7 @@ class Config {
         return false
       }
 
-      logger.mark(`[群聊洞见] 检测到配置文件需要升级: v${userVersion} → v${defaultVersion}`)
+      errorLogger.mark(`检测到配置文件需要升级: v${userVersion} → v${defaultVersion}`)
 
       // 深度合并配置（用户配置优先，补充缺失字段）
       const mergedConfig = this.deepMerge(userConfig, defaultConfig)
@@ -109,14 +108,18 @@ class Config {
       })
 
       // 写入新配置文件
-      fs.writeFileSync(userConfigPath, newConfigText, 'utf8')
-      logger.mark(`[群聊洞见] 配置已升级到 v${defaultVersion}（已保留用户自定义设置）`)
-      logger.info('[群聊洞见] 注意：配置升级后注释将被移除，如需查看完整注释请参考 config/default_config.yaml')
+      fs.writeFileSync(USER_CONFIG_PATH, newConfigText, 'utf8')
+      errorLogger.success(`配置已升级到 v${defaultVersion}（已保留用户自定义设置）`)
+      errorLogger.info('注意：配置升级后注释将被移除', {
+        detail: '如需查看完整注释请参考 config/default_config.yaml'
+      })
 
       return true
     } catch (err) {
-      logger.error(`[群聊洞见] 配置迁移失败: ${err.message}`)
-      logger.error(err.stack)
+      errorLogger.error(err, {
+        type: { code: 'CONFIG_MIGRATION', level: 'error', message: '配置迁移失败' },
+        detail: err.message
+      })
       return false
     }
   }
@@ -152,27 +155,30 @@ class Config {
    * 加载配置
    */
   async load() {
-    const defaultConfigPath = join(pluginRoot, 'config/default_config.yaml')
-    const userConfigPath = join(pluginRoot, 'config/config.yaml')
-
     // 检查 default_config.yaml 是否存在
-    if (!fs.existsSync(defaultConfigPath)) {
-      logger.error('[群聊洞见] 默认配置文件不存在: config/default_config.yaml')
+    if (!fs.existsSync(DEFAULT_CONFIG_PATH)) {
+      errorLogger.error('默认配置文件不存在', {
+        type: { code: 'CONFIG_MISSING', level: 'fatal', message: '配置文件缺失' },
+        file: 'config/default_config.yaml'
+      })
       return {}
     }
 
     // 如果 config.yaml 不存在，自动复制 default_config.yaml
-    if (!fs.existsSync(userConfigPath)) {
+    if (!fs.existsSync(USER_CONFIG_PATH)) {
       try {
-        logger.info('[群聊洞见] 首次启动，正在创建配置文件...')
-        fs.copyFileSync(defaultConfigPath, userConfigPath)
-        logger.mark('[群聊洞见] 配置文件已创建: config/config.yaml')
-        logger.mark('[群聊洞见] 请编辑 config/config.yaml 进行个性化配置')
+        errorLogger.info('首次启动，正在创建配置文件...')
+        fs.copyFileSync(DEFAULT_CONFIG_PATH, USER_CONFIG_PATH)
+        errorLogger.success('配置文件已创建: config/config.yaml')
+        errorLogger.mark('请编辑 config/config.yaml 进行个性化配置')
       } catch (err) {
-        logger.error(`[群聊洞见] 创建配置文件失败: ${err}`)
-        logger.warn('[群聊洞见] 将使用默认配置')
+        errorLogger.error(err, {
+          type: { code: 'FILE_WRITE', level: 'error', message: '文件写入失败' },
+          detail: '创建配置文件失败'
+        })
+        errorLogger.warn('将使用默认配置')
         // 创建失败时读取默认配置
-        const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
+        const defaultConfig = fs.readFileSync(DEFAULT_CONFIG_PATH, 'utf8')
         this.config = YAML.parse(defaultConfig).groupManager || {}
         return this.config
       }
@@ -180,26 +186,31 @@ class Config {
 
     // 检查是否需要配置迁移（版本升级）
     try {
-      const migrated = this.migrateConfig(userConfigPath, defaultConfigPath)
+      const migrated = this.migrateConfig()
       if (migrated) {
-        logger.info('[群聊洞见] 配置迁移完成，正在加载新配置...')
+        errorLogger.info('配置迁移完成，正在加载新配置...')
       }
     } catch (err) {
-      logger.warn(`[群聊洞见] 配置迁移检查失败: ${err.message}`)
+      errorLogger.warn('配置迁移检查失败', {
+        detail: err.message
+      })
     }
 
     // 读取 config.yaml
     try {
-      const userConfig = fs.readFileSync(userConfigPath, 'utf8')
+      const userConfig = fs.readFileSync(USER_CONFIG_PATH, 'utf8')
       const parsedConfig = YAML.parse(userConfig)
       this.config = parsedConfig.groupManager || {}
-      logger.debug('[群聊洞见] 配置已加载')
+      errorLogger.debug('配置已加载')
       return this.config
     } catch (err) {
-      logger.error(`[群聊洞见] 配置文件解析失败: ${err}`)
-      logger.warn('[群聊洞见] 将使用默认配置')
+      errorLogger.error(err, {
+        type: { code: 'CONFIG_PARSE', level: 'error', message: '配置解析失败' },
+        file: 'config/config.yaml'
+      })
+      errorLogger.warn('将使用默认配置')
       // 解析失败时读取默认配置
-      const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8')
+      const defaultConfig = fs.readFileSync(DEFAULT_CONFIG_PATH, 'utf8')
       this.config = YAML.parse(defaultConfig).groupManager || {}
       return this.config
     }
@@ -210,14 +221,12 @@ class Config {
    */
   watch() {
     if (this.watcher) {
-      logger.debug('[群聊洞见] 配置监听器已存在')
+      errorLogger.debug('配置监听器已存在')
       return
     }
 
-    const configPath = join(pluginRoot, 'config/config.yaml')
-
-    if (fs.existsSync(configPath)) {
-      this.watcher = chokidar.watch(configPath, {
+    if (fs.existsSync(USER_CONFIG_PATH)) {
+      this.watcher = chokidar.watch(USER_CONFIG_PATH, {
         persistent: true,
         ignoreInitial: true,
         awaitWriteFinish: {
@@ -227,7 +236,7 @@ class Config {
       })
 
       this.watcher.on('change', async () => {
-        logger.mark('[群聊洞见] 检测到配置文件修改，正在重新加载...')
+        errorLogger.mark('检测到配置文件修改，正在重新加载...')
 
         try {
           const oldConfig = this.config
@@ -238,17 +247,22 @@ class Config {
             try {
               await callback(this.config, oldConfig)
             } catch (err) {
-              logger.error(`[群聊洞见] 配置回调执行失败: ${err}`)
+              errorLogger.error(err, {
+                detail: '配置回调执行失败'
+              })
             }
           }
 
-          logger.mark('[群聊洞见] 配置文件重新加载完成')
+          errorLogger.success('配置文件重新加载完成')
         } catch (err) {
-          logger.error(`[群聊洞见] 配置文件重新加载失败: ${err}`)
+          errorLogger.error(err, {
+            type: { code: 'CONFIG_PARSE', level: 'error', message: '配置重载失败' },
+            detail: '配置文件重新加载失败'
+          })
         }
       })
 
-      logger.debug('[群聊洞见] 配置文件热重载已启用')
+      errorLogger.debug('配置文件热重载已启用')
     }
   }
 

@@ -2,48 +2,49 @@
  * 群聊信息管理插件
  * 功能：谁艾特我、词云生成、AI总结
  * 作者：vsentkb
- * 版本：2.0.0（重构版）
+ * 版本：2.0.0
  */
-import fs from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import chalk from 'chalk'
 import { Config, stopAllServices } from './components/index.js'
+import { loadApps } from './lib/loader/PluginLoader.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const appsPath = join(__dirname, 'apps')
-
-// 自动加载所有 apps 下的插件
-const apps = {}
+// 存储加载的插件
+let apps = {}
 
 try {
   // 加载配置
   await Config.load()
   Config.watch()
 
-  // 统一监听配置变更（避免多个插件重复处理）
+  // 统一监听配置变更
   Config.onChange(async (newConfig) => {
     const { reinitializeServices } = await import('./components/index.js')
     await reinitializeServices(newConfig)
-    logger.mark('[群聊洞见] 配置变更，所有服务已重新初始化')
+    logger.mark(chalk.blue('[群聊洞见]') + ' 配置变更，所有服务已重新初始化')
   })
 
-  // 扫描并加载所有插件
-  const files = fs.readdirSync(appsPath).filter(f => f.endsWith('.js'))
+  // 使用增强的加载器加载所有插件
+  const loadResult = await loadApps()
+  apps = loadResult.apps
 
-  for (const file of files) {
-    try {
-      const mod = await import(`./apps/${file}`)
-      Object.assign(apps, mod)
-      logger.debug(`[群聊洞见] 已加载: apps/${file}`)
-    } catch (err) {
-      logger.error(`[群聊洞见] 加载 apps/${file} 失败:`, err)
-    }
+  // 加载结果已由 PluginLoader 输出详细信息，这里输出最终结果
+  if (loadResult.loadedCount > 0) {
+    logger.info(
+      chalk.green.bold('[群聊洞见]') +
+      ` 插件初始化完成 (${chalk.cyan(loadResult.loadedCount)} 个模块)`
+    )
+  } else {
+    logger.warn(
+      chalk.yellow('[群聊洞见]') +
+      ' 没有加载任何插件模块'
+    )
   }
-
-  logger.info(`[群聊洞见] 插件初始化完成 (${Object.keys(apps).length} 个模块)`)
 } catch (err) {
-  logger.error('[群聊洞见] 插件初始化失败:', err)
+  logger.error(
+    chalk.red.bold('[群聊洞见]') +
+    ' 插件初始化失败:',
+    err
+  )
 }
 
 // 进程退出钩子：确保清理所有监听器和资源
