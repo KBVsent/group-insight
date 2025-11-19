@@ -1,15 +1,14 @@
 /**
- * AI 服务抽象层
- * 支持多种 AI 提供商，方便切换
+ * AI 服务层
+ * 使用 OpenAI SDK，兼容所有提供 OpenAI 格式 API 的服务商
  */
 
 export default class AIService {
   constructor(config) {
     this.config = config || {}
-    this.provider = config.provider || 'claude'
     this.apiKey = config.apiKey
-    this.model = config.model
-    this.baseURL = config.baseURL
+    this.model = config.model || 'gpt-4.1'
+    this.baseURL = config.baseURL || 'https://api.openai.com/v1'
     this.timeout = config.timeout || 60000
     this.maxTokens = config.maxTokens || 2000
     this.client = null
@@ -32,56 +31,6 @@ export default class AIService {
     }
 
     try {
-      switch (this.provider) {
-        case 'claude':
-          await this.initClaude()
-          break
-        case 'openai':
-          await this.initOpenAI()
-          break
-        default:
-          logger.error(`[群聊洞见] 不支持的 AI 提供商: ${this.provider}`)
-          this.initialized = false
-          return false
-      }
-
-      this.initialized = true
-      logger.debug(`[群聊洞见] AI 服务初始化成功，提供商: ${this.provider}`)
-      return true
-    } catch (err) {
-      logger.error(`[群聊洞见] AI 服务初始化失败: ${err}`)
-      this.initialized = false
-      return false
-    }
-  }
-
-  /**
-   * 初始化 Claude 客户端
-   */
-  async initClaude() {
-    try {
-      const Anthropic = await import('@anthropic-ai/sdk')
-      const AnthropicClass = Anthropic.default || Anthropic
-
-      this.client = new AnthropicClass({
-        apiKey: this.apiKey,
-        baseURL: this.baseURL || undefined,
-        timeout: this.timeout
-      })
-
-      this.model = this.model || 'claude-3-5-sonnet-20241022'
-    } catch (err) {
-      logger.error('[群聊洞见] @anthropic-ai/sdk 未安装')
-      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
-      throw err
-    }
-  }
-
-  /**
-   * 初始化 OpenAI 客户端
-   */
-  async initOpenAI() {
-    try {
       const OpenAI = await import('openai')
       const OpenAIClass = OpenAI.default || OpenAI
 
@@ -91,11 +40,14 @@ export default class AIService {
         timeout: this.timeout
       })
 
-      this.model = this.model || 'gpt-4o'
+      this.initialized = true
+      logger.debug(`[群聊洞见] AI 服务初始化成功，模型: ${this.model}`)
+      return true
     } catch (err) {
-      logger.error('[群聊洞见] openai 未安装')
-      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm add openai')
-      throw err
+      logger.error('[群聊洞见] openai SDK 未安装')
+      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
+      this.initialized = false
+      return false
     }
   }
 
@@ -146,48 +98,21 @@ export default class AIService {
    * @private
    */
   async _makeRequest(prompt, maxTokens, temperature) {
-    let content = ''
-    let usage = null
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      max_tokens: maxTokens,
+      temperature,
+      messages: [{
+        role: 'user',
+        content: prompt
+      }]
+    })
 
-    switch (this.provider) {
-      case 'claude': {
-        const response = await this.client.messages.create({
-          model: this.model,
-          max_tokens: maxTokens,
-          temperature,
-          messages: [{
-            role: 'user',
-            content: prompt
-          }]
-        })
-        content = response.content[0].text
-        usage = {
-          prompt_tokens: response.usage?.input_tokens || 0,
-          completion_tokens: response.usage?.output_tokens || 0,
-          total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
-        }
-        break
-      }
-      case 'openai': {
-        const response = await this.client.chat.completions.create({
-          model: this.model,
-          max_tokens: maxTokens,
-          temperature,
-          messages: [{
-            role: 'user',
-            content: prompt
-          }]
-        })
-        content = response.choices[0].message.content
-        usage = {
-          prompt_tokens: response.usage?.prompt_tokens || 0,
-          completion_tokens: response.usage?.completion_tokens || 0,
-          total_tokens: response.usage?.total_tokens || 0
-        }
-        break
-      }
-      default:
-        throw new Error(`不支持的 AI 提供商: ${this.provider}`)
+    const content = response.choices[0].message.content
+    const usage = {
+      prompt_tokens: response.usage?.prompt_tokens || 0,
+      completion_tokens: response.usage?.completion_tokens || 0,
+      total_tokens: response.usage?.total_tokens || 0
     }
 
     return { content, usage }

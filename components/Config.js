@@ -97,48 +97,21 @@ class Config {
       // 深度合并配置（用户配置优先，补充缺失字段）
       const mergedConfig = this.deepMerge(userConfig, defaultConfig)
 
-      // 写入合并后的配置（使用默认配置的完整内容，保留注释）
-      // 由于 YAML 库无法完美保留注释，我们采用替换值的方式
-      let newConfigText = defaultConfigText
+      // 更新版本号
+      mergedConfig.configVersion = defaultVersion
 
-      // 递归替换配置值
-      const replaceValues = (obj, path = []) => {
-        for (const key of Object.keys(obj)) {
-          const fullPath = [...path, key]
-          const userValue = this.getNestedValue(userConfig, fullPath)
-
-          if (userValue !== undefined) {
-            // 用户有自定义值，替换默认值
-            const defaultValue = this.getNestedValue(defaultConfig, fullPath)
-
-            // 只替换简单值（字符串、数字、布尔值）
-            if (
-              typeof userValue !== 'object' &&
-              defaultValue !== undefined &&
-              typeof defaultValue === typeof userValue
-            ) {
-              // 构建正则表达式来匹配该配置行
-              const indent = '  '.repeat(fullPath.length - 1)
-              const regex = new RegExp(
-                `(${indent}${key}:\\s*)${this.escapeRegex(String(defaultValue))}`,
-                'g'
-              )
-              newConfigText = newConfigText.replace(regex, `$1${userValue}`)
-            }
-          }
-
-          // 递归处理嵌套对象
-          if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-            replaceValues(obj[key], fullPath)
-          }
-        }
-      }
-
-      replaceValues(mergedConfig)
+      // 直接使用 YAML.stringify 生成新配置（简单可靠，但会丢失注释）
+      // 用户如需查看完整注释，可参考 default_config.yaml
+      const newConfigText = YAML.stringify(mergedConfig, {
+        indent: 2,
+        lineWidth: 0,  // 不折行
+        minContentWidth: 0
+      })
 
       // 写入新配置文件
       fs.writeFileSync(userConfigPath, newConfigText, 'utf8')
       logger.mark(`[群聊洞见] 配置已升级到 v${defaultVersion}（已保留用户自定义设置）`)
+      logger.info('[群聊洞见] 注意：配置升级后注释将被移除，如需查看完整注释请参考 config/default_config.yaml')
 
       return true
     } catch (err) {

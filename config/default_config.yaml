@@ -1,7 +1,7 @@
 # 群聊信息管理插件配置文件
 
 # 配置文件版本号（请勿手动修改）
-configVersion: 1
+configVersion: 2
 
 groupManager:
   # 消息保留天数
@@ -19,19 +19,14 @@ groupManager:
 
   # AI 配置
   ai:
-    # AI 提供商: claude / openai
-    # 注意：目前仅支持这两个提供商
-    # - claude: 使用 Anthropic Claude (需要安装 @anthropic-ai/sdk)
-    # - openai: 使用 OpenAI 或兼容 OpenAI API 的服务 (需要安装 openai)
-    provider: 'claude'
-
     # API Key (请在 config/config/group-insight.yaml 中配置)
+    # 支持所有兼容 OpenAI API 格式的服务商:
     apiKey: ''
 
     # 模型名称
-    model: 'claude-haiku-4-5'
+    model: 'gpt-4.1'
 
-    # API Base URL (可选，用于自定义 API 端点)
+    # OpenAI: https://api.openai.com/v1
     baseURL: ''
 
     # 超时时间（毫秒）
