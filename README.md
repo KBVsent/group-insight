@@ -1,5 +1,7 @@
 # 群聊洞见插件 (Group Insight)
 
+![Banner](https://upload.cc/i1/2025/11/21/q4KxA8.jpeg)
+
 一个功能强大的 Yunzai 群聊分析插件，提供 AI 驱动的深度洞察、词云生成和消息追踪功能。
 
 ## 核心功能

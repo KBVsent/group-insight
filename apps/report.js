@@ -176,6 +176,62 @@ export class ReportPlugin extends plugin {
   }
 
   /**
+   * 检查报告是否正在生成中（防止并发重复生成）
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期
+   * @returns {Promise<boolean>} 是否正在生成
+   */
+  async isGenerating(groupId, date) {
+    try {
+      const lockKey = `Yz:groupManager:generating:${groupId}:${date}`
+      const lockValue = await redis.get(lockKey)
+      return !!lockValue
+    } catch (err) {
+      logger.error(`[群聊洞见-报告] 检查生成锁失败: ${err}`)
+      return false
+    }
+  }
+
+  /**
+   * 设置生成锁（开始生成前调用）
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期
+   * @param {number} ttl - 锁超时时间（秒），默认5分钟
+   * @returns {Promise<boolean>} 是否成功获取锁
+   */
+  async acquireGeneratingLock(groupId, date, ttl = 300) {
+    try {
+      const lockKey = `Yz:groupManager:generating:${groupId}:${date}`
+      // 使用 SETNX 确保原子性获取锁
+      const result = await redis.set(lockKey, Date.now().toString(), 'EX', ttl, 'NX')
+      if (result) {
+        logger.debug(`[群聊洞见-报告] 获取生成锁成功: 群 ${groupId}, 日期 ${date}`)
+        return true
+      }
+      logger.debug(`[群聊洞见-报告] 获取生成锁失败（已被占用）: 群 ${groupId}, 日期 ${date}`)
+      return false
+    } catch (err) {
+      logger.error(`[群聊洞见-报告] 获取生成锁失败: ${err}`)
+      return false
+    }
+  }
+
+  /**
+   * 释放生成锁（生成完成后调用）
+   * @param {string} groupId - 群号
+   * @param {string} date - 日期
+   */
+  async releaseGeneratingLock(groupId, date) {
+    try {
+      const lockKey = `Yz:groupManager:generating:${groupId}:${date}`
+      await redis.del(lockKey)
+      logger.debug(`[群聊洞见-报告] 释放生成锁: 群 ${groupId}, 日期 ${date}`)
+    } catch (err) {
+      logger.error(`[群聊洞见-报告] 释放生成锁失败: ${err}`)
+    }
+  }
+
+  /**
    * 定时任务：每天23:59生成群聊报告（带并发控制）
    */
   async scheduledReport() {
@@ -215,43 +271,60 @@ export class ReportPlugin extends plugin {
             return { groupId, status: 'skipped', reason: 'insufficient_messages' }
           }
 
-          // 获取群名
-          let groupName = `群${groupId}`
+          // 检查是否正在生成中（避免与用户手动触发冲突）
+          if (await this.isGenerating(groupId, targetDate)) {
+            logger.info(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 报告正在生成中，跳过定时任务`)
+            return { groupId, status: 'skipped', reason: 'already_generating' }
+          }
+
+          // 尝试获取生成锁
+          if (!await this.acquireGeneratingLock(groupId, targetDate)) {
+            logger.info(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 获取锁失败，跳过定时任务`)
+            return { groupId, status: 'skipped', reason: 'lock_failed' }
+          }
+
           try {
-            const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
-            const group = bot.pickGroup?.(groupId)
-            if (group) {
-              const groupInfo = await group.getInfo?.()
-              groupName = groupInfo?.group_name || groupInfo?.name || groupName
+            // 获取群名
+            let groupName = `群${groupId}`
+            try {
+              const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
+              const group = bot.pickGroup?.(groupId)
+              if (group) {
+                const groupInfo = await group.getInfo?.()
+                groupName = groupInfo?.group_name || groupInfo?.name || groupName
+              }
+            } catch (err) {
+              logger.debug(`[群聊洞见-报告] 获取群 ${groupId} 名称失败，使用默认名称`)
             }
-          } catch (err) {
-            logger.debug(`[群聊洞见-报告] 获取群 ${groupId} 名称失败，使用默认名称`)
+
+            // 执行分析
+            logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成 ${targetDate} 报告 (消息数: ${messages.length})`)
+            const analysisResults = await this.performAnalysis(messages, 1, groupId, targetDate)
+
+            if (!analysisResults) {
+              logger.warn(`[群聊洞见-报告] 群 ${groupId} 报告生成失败：分析失败`)
+              return { groupId, status: 'failed', error: 'analysis_failed' }
+            }
+
+            // 保存报告到 Redis（使用固定的目标日期）
+            await messageCollector.redisHelper.saveReport(groupId, targetDate, {
+              stats: analysisResults.stats,
+              topics: analysisResults.topics,
+              goldenQuotes: analysisResults.goldenQuotes,
+              userTitles: analysisResults.userTitles,
+              messageCount: messages.length,
+              tokenUsage: analysisResults.tokenUsage
+            })
+
+            // 设置冷却标记（防止定时任务后1小时内频繁手动触发）
+            await this.setCooldown(groupId, 'scheduled', messages.length)
+
+            logger.mark(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 报告生成成功 (${messages.length} 条消息)`)
+            return { groupId, status: 'success', messageCount: messages.length }
+          } finally {
+            // 无论成功失败都释放锁
+            await this.releaseGeneratingLock(groupId, targetDate)
           }
-
-          // 执行分析
-          logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成 ${targetDate} 报告 (消息数: ${messages.length})`)
-          const analysisResults = await this.performAnalysis(messages, 1, groupId, targetDate)
-
-          if (!analysisResults) {
-            logger.warn(`[群聊洞见-报告] 群 ${groupId} 报告生成失败：分析失败`)
-            return { groupId, status: 'failed', error: 'analysis_failed' }
-          }
-
-          // 保存报告到 Redis（使用固定的目标日期）
-          await messageCollector.redisHelper.saveReport(groupId, targetDate, {
-            stats: analysisResults.stats,
-            topics: analysisResults.topics,
-            goldenQuotes: analysisResults.goldenQuotes,
-            userTitles: analysisResults.userTitles,
-            messageCount: messages.length,
-            tokenUsage: analysisResults.tokenUsage
-          })
-
-          // 设置冷却标记（防止定时任务后1小时内频繁手动触发）
-          await this.setCooldown(groupId, 'scheduled', messages.length)
-
-          logger.mark(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 报告生成成功 (${messages.length} 条消息)`)
-          return { groupId, status: 'success', messageCount: messages.length }
         } catch (err) {
           logger.error(`[群聊洞见-报告] 群 ${groupId} 定时报告异常: ${err}`)
           return { groupId, status: 'error', error: err.message }
@@ -341,29 +414,24 @@ export class ReportPlugin extends plugin {
       // 从 Redis 获取指定日期的报告
       let report = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
 
-      // 如果是查询历史日期且报告不存在，直接提示
-      if (!isToday && !report) {
-        return this.reply(`${dateLabel}还没有生成报告`, true)
+      // 获取群名
+      let groupName = '未知群聊'
+      try {
+        const groupInfo = await e.group.getInfo?.()
+        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+      } catch (err) {
+        groupName = `群${e.group_id}`
       }
 
-      // 如果是查询今天的报告
+      // ===== 当天报告逻辑 =====
+      // 当天的报告：即使有缓存，不在冷却期也要重新生成（可能有新消息）
       if (isToday) {
-        // 检查冷却状态
         const cooldown = await this.checkCooldown(e.group_id, false)
 
-        // 如果在冷却期内，返回缓存的报告
+        // 在冷却期内且有缓存 → 直接返回缓存
         if (cooldown.inCooldown && report) {
-          const elapsedMinutes = cooldown.lastGenerated.elapsedMinutes
+          const elapsedMinutes = cooldown.lastGenerated?.elapsedMinutes || 0
           logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的今天报告（冷却中，${elapsedMinutes}分钟前已生成）`)
-
-          // 获取群名并渲染报告
-          let groupName = '未知群聊'
-          try {
-            const groupInfo = await e.group.getInfo?.()
-            groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-          } catch (err) {
-            groupName = `群${e.group_id}`
-          }
 
           const img = await this.renderReport(report, {
             groupName,
@@ -379,36 +447,34 @@ export class ReportPlugin extends plugin {
           }
         }
 
-        // 不在冷却期或缓存不存在，触发生成
-        if (!cooldown.inCooldown || !report) {
-          await this.reply('正在生成今天的群聊报告，请稍候...')
+        // 不在冷却期（或无缓存）→ 触发生成
+        const messages = await messageCollector.getMessages(e.group_id, 1, queryDate)
 
-          // 获取今天的消息
-          const messages = await messageCollector.getMessages(e.group_id, 1)
+        if (messages.length === 0) {
+          return this.reply('今天还没有消息，无法生成报告', true)
+        }
 
-          if (messages.length === 0) {
-            return this.reply('今天还没有消息，无法生成报告', true)
-          }
+        // 检查是否正在生成中（防止并发重复生成）
+        if (await this.isGenerating(e.group_id, queryDate)) {
+          return this.reply('报告正在生成中，请稍后再试', true)
+        }
 
-          // 获取群名
-          let groupName = '未知群聊'
-          try {
-            const groupInfo = await e.group.getInfo?.()
-            groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-          } catch (err) {
-            groupName = `群${e.group_id}`
-          }
+        // 尝试获取生成锁
+        if (!await this.acquireGeneratingLock(e.group_id, queryDate)) {
+          return this.reply('报告正在生成中，请稍后再试', true)
+        }
 
-          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的报告 (消息数: ${messages.length})`)
+        try {
+          await this.reply(`正在生成今天的群聊报告（${messages.length}条消息），请稍候...`)
 
-          // 执行分析
+          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的今天报告 (消息数: ${messages.length})`)
+
           const analysisResults = await this.performAnalysis(messages, 1, e.group_id, queryDate)
 
           if (!analysisResults) {
             return this.reply('分析失败，请查看日志', true)
           }
 
-          // 保存报告到 Redis
           await messageCollector.redisHelper.saveReport(e.group_id, queryDate, {
             stats: analysisResults.stats,
             topics: analysisResults.topics,
@@ -418,12 +484,10 @@ export class ReportPlugin extends plugin {
             tokenUsage: analysisResults.tokenUsage
           })
 
-          // 设置冷却
           await this.setCooldown(e.group_id, 'user', messages.length)
 
-          logger.mark(`[群聊洞见-报告] 用户触发报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+          logger.mark(`[群聊洞见-报告] 用户触发今天报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
-          // 渲染并发送报告
           const savedReport = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
           const img = await this.renderReport(savedReport || analysisResults, {
             groupName,
@@ -437,69 +501,146 @@ export class ReportPlugin extends plugin {
           } else {
             return this.reply('报告已生成并保存，但渲染失败', true)
           }
+        } finally {
+          // 无论成功失败都释放锁
+          await this.releaseGeneratingLock(e.group_id, queryDate)
         }
       }
 
-      // 历史报告存在，直接渲染返回
-      if (report) {
-        logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告`)
+      // ===== 历史报告逻辑 =====
+      // 历史日期：检查缓存消息数与当前消息数的差异
 
-        // 获取群名
-        let groupName = '未知群聊'
-        try {
-          const groupInfo = await e.group.getInfo?.()
-          groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-        } catch (err) {
-          groupName = `群${e.group_id}`
+      // 先获取消息数量
+      const messages = await messageCollector.getMessages(e.group_id, 1, queryDate)
+
+      if (messages.length === 0) {
+        return this.reply(`${dateLabel}没有消息记录（可能已过期或未收集）`, true)
+      }
+
+      // 如果有缓存，检查消息数差异
+      if (report) {
+        const cachedMessageCount = report.messageCount || 0
+        const currentMessageCount = messages.length
+        const messageDiff = Math.abs(currentMessageCount - cachedMessageCount)
+
+        // 消息数差异 <= 50 条 → 使用缓存（历史已定型）
+        if (messageDiff <= 50) {
+          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告（缓存有效，消息差异: ${messageDiff}条）`)
+
+          const img = await this.renderReport(report, {
+            groupName,
+            model: aiService?.model || '',
+            tokenUsage: report.tokenUsage,
+            date: queryDate
+          })
+
+          if (img) {
+            return this.reply(img)
+          } else {
+            return this.sendTextSummary(report, dateLabel, queryDate)
+          }
         }
 
-        // 渲染报告
-        const img = await this.renderReport(report, {
+        // 消息数差异 > 50 条 → 无视冷却，重新生成
+        logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告 - 消息数差异过大 (缓存: ${cachedMessageCount}, 当前: ${currentMessageCount}, 差异: ${messageDiff})，将重新生成`)
+      }
+
+      // 无缓存或差异过大 → 生成报告
+      // 历史日期不检查冷却，因为生成后即为定型报告，再次触发会直接使用缓存
+
+      // 检查是否正在生成中（防止并发重复生成）
+      if (await this.isGenerating(e.group_id, queryDate)) {
+        return this.reply('报告正在生成中，请稍后再试', true)
+      }
+
+      // 尝试获取生成锁
+      if (!await this.acquireGeneratingLock(e.group_id, queryDate)) {
+        return this.reply('报告正在生成中，请稍后再试', true)
+      }
+
+      try {
+        await this.reply(`正在生成${dateLabel}的群聊报告（${messages.length}条消息），请稍候...`)
+
+        logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
+
+        const analysisResults = await this.performAnalysis(messages, 1, e.group_id, queryDate)
+
+        if (!analysisResults) {
+          return this.reply('分析失败，请查看日志', true)
+        }
+
+        await messageCollector.redisHelper.saveReport(e.group_id, queryDate, {
+          stats: analysisResults.stats,
+          topics: analysisResults.topics,
+          goldenQuotes: analysisResults.goldenQuotes,
+          userTitles: analysisResults.userTitles,
+          messageCount: messages.length,
+          tokenUsage: analysisResults.tokenUsage
+        })
+
+        // 历史日期不设置冷却，生成后即为定型报告，再次触发会直接使用缓存
+
+        logger.mark(`[群聊洞见-报告] 用户触发${dateLabel}报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+
+        const savedReport = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
+        const img = await this.renderReport(savedReport || analysisResults, {
           groupName,
           model: aiService?.model || '',
-          tokenUsage: report.tokenUsage,
+          tokenUsage: (savedReport || analysisResults).tokenUsage,
           date: queryDate
         })
 
         if (img) {
           return this.reply(img)
         } else {
-          // 渲染失败，发送文本总结
-          let textSummary = `📊 ${dateLabel}群聊报告\n\n`
-          textSummary += `消息总数: ${report.stats?.basic?.totalMessages || report.messageCount}\n`
-          textSummary += `参与人数: ${report.stats?.basic?.totalUsers || 0}\n`
-          textSummary += `日期: ${queryDate}\n\n`
-
-          if (report.topics && report.topics.length > 0) {
-            textSummary += `💬 热门话题:\n`
-            report.topics.forEach((topic, i) => {
-              textSummary += `${i + 1}. ${topic.topic}\n`
-            })
-            textSummary += `\n`
-          }
-
-          if (report.userTitles && report.userTitles.length > 0) {
-            textSummary += `🏆 群友称号:\n`
-            report.userTitles.forEach((title) => {
-              textSummary += `• ${title.user} - ${title.title} (${title.mbti})\n`
-            })
-            textSummary += `\n`
-          }
-
-          if (report.goldenQuotes && report.goldenQuotes.length > 0) {
-            textSummary += `💎 群圣经:\n`
-            report.goldenQuotes.forEach((quote, i) => {
-              textSummary += `${i + 1}. "${quote.quote}" —— ${quote.sender}\n`
-            })
-          }
-
-          return this.reply(textSummary, true)
+          return this.reply('报告已生成并保存，但渲染失败', true)
         }
+      } finally {
+        // 无论成功失败都释放锁
+        await this.releaseGeneratingLock(e.group_id, queryDate)
       }
     } catch (err) {
       logger.error(`[群聊洞见-报告] 查询报告错误: ${err}`)
       return this.reply(`查询报告失败: ${err.message}`, true)
     }
+  }
+
+  /**
+   * 渲染失败时发送文本摘要
+   * @param {Object} report - 报告数据
+   * @param {string} dateLabel - 用于显示的日期标签
+   * @param {string} queryDate - 查询日期字符串
+   */
+  sendTextSummary(report, dateLabel, queryDate) {
+    let textSummary = `📊 ${dateLabel}群聊报告\n\n`
+    textSummary += `消息总数: ${report.stats?.basic?.totalMessages || report.messageCount}\n`
+    textSummary += `参与人数: ${report.stats?.basic?.totalUsers || 0}\n`
+    textSummary += `日期: ${queryDate}\n\n`
+
+    if (report.topics && report.topics.length > 0) {
+      textSummary += `💬 热门话题:\n`
+      report.topics.forEach((topic, i) => {
+        textSummary += `${i + 1}. ${topic.topic}\n`
+      })
+      textSummary += `\n`
+    }
+
+    if (report.userTitles && report.userTitles.length > 0) {
+      textSummary += `🏆 群友称号:\n`
+      report.userTitles.forEach((title) => {
+        textSummary += `• ${title.user} - ${title.title} (${title.mbti})\n`
+      })
+      textSummary += `\n`
+    }
+
+    if (report.goldenQuotes && report.goldenQuotes.length > 0) {
+      textSummary += `💎 群圣经:\n`
+      report.goldenQuotes.forEach((quote, i) => {
+        textSummary += `${i + 1}. "${quote.quote}" —— ${quote.sender}\n`
+      })
+    }
+
+    return this.reply(textSummary, true)
   }
 
   /**
@@ -548,52 +689,67 @@ export class ReportPlugin extends plugin {
         return this.reply(`${dateLabel}还没有消息，无法生成报告`, true)
       }
 
-      // 获取群名
-      let groupName = '未知群聊'
+      // 检查是否正在生成中（即使主人也需等待当前生成完成）
+      if (await this.isGenerating(e.group_id, targetDate)) {
+        return this.reply('该日期的报告正在生成中，请稍后再试', true)
+      }
+
+      // 尝试获取生成锁
+      if (!await this.acquireGeneratingLock(e.group_id, targetDate)) {
+        return this.reply('该日期的报告正在生成中，请稍后再试', true)
+      }
+
       try {
-        const groupInfo = await e.group.getInfo?.()
-        groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
-      } catch (err) {
-        groupName = `群${e.group_id}`
-      }
+        // 获取群名
+        let groupName = '未知群聊'
+        try {
+          const groupInfo = await e.group.getInfo?.()
+          groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
+        } catch (err) {
+          groupName = `群${e.group_id}`
+        }
 
-      logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
+        logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
 
-      // 执行分析
-      const analysisResults = await this.performAnalysis(messages, 1, e.group_id, targetDate)
+        // 执行分析
+        const analysisResults = await this.performAnalysis(messages, 1, e.group_id, targetDate)
 
-      if (!analysisResults) {
-        return this.reply('分析失败，请查看日志', true)
-      }
+        if (!analysisResults) {
+          return this.reply('分析失败，请查看日志', true)
+        }
 
-      // 保存报告到 Redis（覆盖已有报告）
-      await messageCollector.redisHelper.saveReport(e.group_id, targetDate, {
-        stats: analysisResults.stats,
-        topics: analysisResults.topics,
-        goldenQuotes: analysisResults.goldenQuotes,
-        userTitles: analysisResults.userTitles,
-        messageCount: messages.length,
-        tokenUsage: analysisResults.tokenUsage
-      })
+        // 保存报告到 Redis（覆盖已有报告）
+        await messageCollector.redisHelper.saveReport(e.group_id, targetDate, {
+          stats: analysisResults.stats,
+          topics: analysisResults.topics,
+          goldenQuotes: analysisResults.goldenQuotes,
+          userTitles: analysisResults.userTitles,
+          messageCount: messages.length,
+          tokenUsage: analysisResults.tokenUsage
+        })
 
-      // 设置冷却标记（主人下次触发依然会无视冷却）
-      await this.setCooldown(e.group_id, 'master', messages.length)
+        // 设置冷却标记（主人下次触发依然会无视冷却）
+        await this.setCooldown(e.group_id, 'master', messages.length)
 
-      logger.mark(`[群聊洞见-报告] 主人强制生成${dateLabel}报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+        logger.mark(`[群聊洞见-报告] 主人强制生成${dateLabel}报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
-      // 渲染并发送报告
-      const savedReport = await messageCollector.redisHelper.getReport(e.group_id, targetDate)
-      const img = await this.renderReport(savedReport || analysisResults, {
-        groupName,
-        model: aiService?.model || '',
-        tokenUsage: (savedReport || analysisResults).tokenUsage,
-        date: targetDate
-      })
+        // 渲染并发送报告
+        const savedReport = await messageCollector.redisHelper.getReport(e.group_id, targetDate)
+        const img = await this.renderReport(savedReport || analysisResults, {
+          groupName,
+          model: aiService?.model || '',
+          tokenUsage: (savedReport || analysisResults).tokenUsage,
+          date: targetDate
+        })
 
-      if (img) {
-        return this.reply(img)
-      } else {
-        return this.reply('报告已生成并保存，但渲染失败', true)
+        if (img) {
+          return this.reply(img)
+        } else {
+          return this.reply('报告已生成并保存，但渲染失败', true)
+        }
+      } finally {
+        // 无论成功失败都释放锁
+        await this.releaseGeneratingLock(e.group_id, targetDate)
       }
     } catch (err) {
       logger.error(`[群聊洞见-报告] 强制生成报告错误: ${err}`)
@@ -684,8 +840,13 @@ export class ReportPlugin extends plugin {
 
                   logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}, Tokens: ${parsed.tokenUsage?.total_tokens || 0}`)
                 } else {
-                  failedBatches.push(i)
-                  logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，跳过此批次`)
+                  // 仅当未重试过时才加入重试列表
+                  if (!parsed.retried) {
+                    failedBatches.push(i)
+                    logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，将尝试重试`)
+                  } else {
+                    logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败且已重试过，跳过此批次`)
+                  }
                 }
               } catch (err) {
                 logger.error(`[群聊洞见-报告] 批次${i}缓存解析失败: ${err}`)
@@ -693,13 +854,42 @@ export class ReportPlugin extends plugin {
               }
             } else {
               missingBatches.push(i)
-              logger.info(`[群聊洞见-报告] 批次${i}缓存不存在，跳过此批次`)
+              logger.info(`[群聊洞见-报告] 批次${i}缓存不存在，需要补全`)
+            }
+          }
+
+          logger.info(`[群聊洞见-报告] 批次状态检查: 成功=${batchCaches.length}, 失败=${failedBatches.length}, 缺失=${missingBatches.length}`)
+
+          // 重试缺失和失败的批次
+          if (missingBatches.length > 0 || failedBatches.length > 0) {
+            const retryResult = await this.analyzeMissingBatches(
+              messages, groupId, date,
+              missingBatches, failedBatches, config
+            )
+
+            // 将成功补全的批次添加到缓存列表
+            for (const successBatch of retryResult.successBatches) {
+              batchCaches.push(successBatch)
+
+              // 累加重试的 token 使用量
+              if (successBatch.tokenUsage) {
+                batchTokenUsage.prompt_tokens += successBatch.tokenUsage.prompt_tokens || 0
+                batchTokenUsage.completion_tokens += successBatch.tokenUsage.completion_tokens || 0
+                batchTokenUsage.total_tokens += successBatch.tokenUsage.total_tokens || 0
+              }
+            }
+
+            if (retryResult.stillFailedBatches.length > 0) {
+              logger.warn(`[群聊洞见-报告] 批次补全后仍有 ${retryResult.stillFailedBatches.length} 个批次失败: [${retryResult.stillFailedBatches.join(', ')}]`)
             }
           }
 
           // 如果有任何成功的批次缓存，就使用增量分析
           if (batchCaches.length > 0) {
             useIncrementalAnalysis = true
+
+            // 按批次索引排序以确保合并顺序正确
+            batchCaches.sort((a, b) => a.batchIndex - b.batchIndex)
 
             // 合并所有批次的结果
             let mergedTopics = []
@@ -711,12 +901,7 @@ export class ReportPlugin extends plugin {
               mergedQuotes = this.mergeGoldenQuotes(mergedQuotes, batch.goldenQuotes || [])
             }
 
-            const skippedInfo = []
-            if (failedBatches.length > 0) skippedInfo.push(`失败: ${failedBatches.join(',')}`)
-            if (missingBatches.length > 0) skippedInfo.push(`缺失: ${missingBatches.join(',')}`)
-            const skippedText = skippedInfo.length > 0 ? ` (跳过批次 ${skippedInfo.join(', ')})` : ''
-
-            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}${skippedText}`)
+            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}`)
 
             // 如果有剩余消息，分析增量部分
             if (remainingMessages > 0) {
@@ -941,6 +1126,136 @@ export class ReportPlugin extends plugin {
       logger.error(`[群聊洞见-报告] 渲染增强总结失败: ${err}`)
       return null
     }
+  }
+
+  /**
+   * 分析缺失/失败的批次并保存到缓存
+   * 用于报告生成时的批次补全
+   * @param {Array} messages - 目标日期的所有消息
+   * @param {string} groupId - 群号
+   * @param {string} date - 目标日期 (YYYY-MM-DD)
+   * @param {Array} missingBatches - 缺失的批次索引数组
+   * @param {Array} failedBatches - 失败的批次索引数组
+   * @param {Object} config - 配置对象
+   * @returns {Object} { successBatches: [], stillFailedBatches: [], tokenUsage: {} }
+   */
+  async analyzeMissingBatches(messages, groupId, date, missingBatches, failedBatches, config) {
+    const maxMessages = config.ai?.maxMessages || 1000
+    const contextOverlap = 50
+    const batchesToRetry = [...missingBatches, ...failedBatches].sort((a, b) => a - b)
+
+    const results = {
+      successBatches: [],
+      stillFailedBatches: [],
+      tokenUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    }
+
+    if (batchesToRetry.length === 0) {
+      return results
+    }
+
+    // 获取分析器
+    const [topicAnalyzer, goldenQuoteAnalyzer] = await Promise.all([
+      getTopicAnalyzer(),
+      getGoldenQuoteAnalyzer()
+    ])
+
+    logger.info(`[群聊洞见-报告] 开始补全 ${batchesToRetry.length} 个批次: [${batchesToRetry.join(', ')}]`)
+
+    // 顺序处理批次，避免 API 过载
+    for (const batchIndex of batchesToRetry) {
+      try {
+        const startIndex = batchIndex * maxMessages
+        const endIndex = (batchIndex + 1) * maxMessages
+        const contextStart = Math.max(0, startIndex - contextOverlap)
+        const messagesToAnalyze = messages.slice(contextStart, endIndex)
+
+        if (messagesToAnalyze.length === 0) {
+          logger.warn(`[群聊洞见-报告] 批次${batchIndex}消息为空，跳过`)
+          continue
+        }
+
+        const actualContextCount = startIndex - contextStart
+        logger.info(`[群聊洞见-报告] 补全批次${batchIndex}: 分析 [${contextStart}-${Math.min(messages.length, endIndex)}] 共 ${messagesToAnalyze.length} 条 (含${actualContextCount}条上下文)`)
+
+        // 构建轻量级用户映射用于统计
+        const userMap = new Map()
+        for (const msg of messagesToAnalyze) {
+          if (msg.user_id && msg.nickname && !userMap.has(msg.nickname)) {
+            userMap.set(msg.nickname, { user_id: msg.user_id, nickname: msg.nickname })
+          }
+        }
+        const stats = { users: Array.from(userMap.values()) }
+
+        // 并行分析话题和金句
+        const [topicResult, quoteResult] = await Promise.all([
+          topicAnalyzer?.analyze(messagesToAnalyze, stats).catch(err => {
+            logger.error(`[群聊洞见-报告] 批次${batchIndex}话题分析失败: ${err}`)
+            return { topics: [], usage: null }
+          }),
+          goldenQuoteAnalyzer?.analyze(messagesToAnalyze, stats).catch(err => {
+            logger.error(`[群聊洞见-报告] 批次${batchIndex}金句分析失败: ${err}`)
+            return { goldenQuotes: [], usage: null }
+          })
+        ])
+
+        // 计算本批次的 token 使用量
+        const batchTokenUsage = {
+          prompt_tokens: (topicResult?.usage?.prompt_tokens || 0) + (quoteResult?.usage?.prompt_tokens || 0),
+          completion_tokens: (topicResult?.usage?.completion_tokens || 0) + (quoteResult?.usage?.completion_tokens || 0),
+          total_tokens: (topicResult?.usage?.total_tokens || 0) + (quoteResult?.usage?.total_tokens || 0)
+        }
+
+        // 保存到缓存
+        const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${batchIndex}`
+        const cacheData = {
+          batchIndex,
+          startIndex,
+          endIndex,
+          messageCount: messagesToAnalyze.length,
+          topics: topicResult?.topics || [],
+          goldenQuotes: quoteResult?.goldenQuotes || [],
+          tokenUsage: batchTokenUsage,
+          analyzedAt: Date.now(),
+          success: true,
+          retried: true  // 标记为重试/补全的批次
+        }
+
+        await redis.set(cacheKey, JSON.stringify(cacheData), 'EX', 86400)
+
+        results.successBatches.push(cacheData)
+        results.tokenUsage.prompt_tokens += batchTokenUsage.prompt_tokens
+        results.tokenUsage.completion_tokens += batchTokenUsage.completion_tokens
+        results.tokenUsage.total_tokens += batchTokenUsage.total_tokens
+
+        logger.info(`[群聊洞见-报告] 批次${batchIndex}补全成功 - 话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}`)
+
+      } catch (err) {
+        logger.error(`[群聊洞见-报告] 批次${batchIndex}补全失败: ${err}`)
+
+        // 保存失败标记，防止本次会话重复尝试
+        const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${batchIndex}`
+        try {
+          await redis.set(cacheKey, JSON.stringify({
+            batchIndex,
+            success: false,
+            error: err.message,
+            analyzedAt: Date.now(),
+            retried: true
+          }), 'EX', 86400)
+        } catch (cacheErr) {
+          logger.error(`[群聊洞见-报告] 保存批次${batchIndex}失败标记失败: ${cacheErr}`)
+        }
+
+        results.stillFailedBatches.push(batchIndex)
+      }
+    }
+
+    const successCount = results.successBatches.length
+    const failCount = results.stillFailedBatches.length
+    logger.info(`[群聊洞见-报告] 批次补全完成 - 成功: ${successCount}, 失败: ${failCount}, 总Token: ${results.tokenUsage.total_tokens}`)
+
+    return results
   }
 
   /**
