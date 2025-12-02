@@ -226,9 +226,3 @@ plugins/group-insight/
 ## License
 
 MIT License
-
----
-
-**作者**: vsentkb
-**版本**: v2.0.0
-**更新时间**: 2025-11-19

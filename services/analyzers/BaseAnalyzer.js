@@ -139,8 +139,7 @@ export default class BaseAnalyzer {
     const {
       includeTime = true,
       includeNickname = true,
-      maxLength = null,
-      maxMessages = null,  // 新增：按消息数量限制
+      maxMessages = null,
       filter = null
     } = options
 
@@ -153,7 +152,7 @@ export default class BaseAnalyzer {
         continue
       }
 
-      // 检查消息数量限制（优先于字符长度限制）
+      // 检查消息数量限制
       if (maxMessages && processedCount >= maxMessages) {
         break
       }
@@ -177,13 +176,6 @@ export default class BaseAnalyzer {
 
       formatted.push(line)
       processedCount++
-
-      // 检查字符长度限制（作为兜底）
-      if (maxLength && formatted.join('\n').length > maxLength) {
-        formatted.pop()  // 移除最后一条,避免超长
-        logger.warn(`[BaseAnalyzer] 达到字符长度限制 ${maxLength}，实际处理 ${processedCount - 1} 条消息`)
-        break
-      }
     }
 
     return formatted.join('\n')

@@ -23,11 +23,10 @@ export default class TopicAnalyzer extends BaseAnalyzer {
       return { topics: [], usage: null }
     }
 
-    // 格式化消息（不限制字符长度，依赖外部传入的消息数量控制）
+    // 格式化消息（限制消息数量）
     const formattedMessages = this.formatMessages(messages, {
       includeTime: true,
       includeNickname: true
-      // 移除 maxLength 限制，由调用方控制消息数量
     })
 
     // 构建提示词
@@ -70,7 +69,6 @@ export default class TopicAnalyzer extends BaseAnalyzer {
           : [],
         detail: topic.detail.trim()
       }))
-      // 移除 slice 限制，返回所有话题
 
     logger.info(`[TopicAnalyzer] 提取到 ${validTopics.length} 个话题`)
 

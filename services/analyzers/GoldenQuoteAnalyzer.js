@@ -63,8 +63,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
     // 格式化消息
     const formattedMessages = this.formatMessages(filteredMessages, {
       includeTime: false,
-      includeNickname: true,
-      maxLength: 10000
+      includeNickname: true
     })
 
     // 构建提示词
