@@ -65,7 +65,7 @@ class AIServiceManager extends ServiceManager {
 class WordCloudGeneratorManager extends ServiceManager {
   async _doInitialize() {
     const config = Config.get()
-    return new WordCloudGenerator(config)
+    return new WordCloudGenerator(config?.wordCloud || {})
   }
 }
 

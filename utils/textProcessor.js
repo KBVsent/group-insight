@@ -1,6 +1,6 @@
 /**
  * 文本处理工具类
- * 提供分词、过滤停用词、统计词频等功能
+ * 提供分词、过滤停用词、统计词频、TF-IDF 关键词提取等功能
  */
 
 import fs from 'fs'
@@ -202,12 +202,19 @@ export default class TextProcessor {
     const {
       minLength = 2,
       minFrequency = 2,
-      maxWords = 100
+      maxWords = 100,
+      extractMethod = this.config?.wordCloud?.extractMethod || 'frequency'
     } = options
 
     // 确保已初始化
     await this.init()
 
+    // 如果配置为 TF-IDF 模式，使用 TF-IDF 提取
+    if (extractMethod === 'tfidf') {
+      return this.processMessagesTFIDF(messages, { minLength, maxWords })
+    }
+
+    // 默认：词频统计模式
     // 提取所有消息文本
     const allWords = []
 
@@ -224,6 +231,123 @@ export default class TextProcessor {
 
     // 限制返回数量
     return wordCount.slice(0, maxWords)
+  }
+
+  /**
+   * 使用 TF-IDF 算法处理消息并提取关键词
+   * 将同一用户的消息聚合为一个文档，计算跨用户的 TF-IDF 权重
+   * @param {array} messages - 消息列表
+   * @param {object} options - 选项
+   * @returns {Array<{word: string, weight: number}>} 关键词及其权重
+   */
+  async processMessagesTFIDF(messages, options = {}) {
+    const {
+      minLength = 2,
+      maxWords = 100
+    } = options
+
+    // 确保已初始化
+    await this.init()
+
+    // 步骤1：按用户聚合消息（每个用户 = 一个文档）
+    const userDocs = new Map()  // userId -> words[]
+
+    for (const msg of messages) {
+      const userId = msg.user_id || msg.sender?.user_id || 'unknown'
+      const cleanedText = this.cleanText(msg.message || msg.msg || '')
+      if (!cleanedText) continue
+
+      const words = this.cut(cleanedText, minLength)
+      if (words.length === 0) continue
+
+      if (!userDocs.has(userId)) {
+        userDocs.set(userId, [])
+      }
+      userDocs.get(userId).push(...words)
+    }
+
+    // 转换为文档数组
+    const docsWords = Array.from(userDocs.values()).filter(words => words.length > 0)
+
+    if (docsWords.length === 0) {
+      return []
+    }
+
+    // 步骤2：计算 TF-IDF
+    const keywords = this.calculateTFIDF(docsWords, maxWords)
+
+    logger.debug(`[群聊洞见] TF-IDF 提取完成，用户数: ${docsWords.length}，关键词数: ${keywords.length}`)
+
+    return keywords
+  }
+
+  /**
+   * TF-IDF 算法实现
+   * @param {string[][]} docsWords - 分词后的文档数组（每个文档是词汇数组）
+   * @param {number} topK - 返回前 K 个关键词
+   * @returns {Array<{word: string, weight: number}>} 关键词及其 TF-IDF 权重（归一化到 0-1）
+   */
+  calculateTFIDF(docsWords, topK = 100) {
+    if (!docsWords || docsWords.length === 0) {
+      return []
+    }
+
+    const docCount = docsWords.length
+
+    // 步骤1：计算文档频率（DF）- 每个词在多少文档中出现
+    const wordDocFreq = new Map()
+
+    for (const words of docsWords) {
+      const uniqueWords = new Set(words)
+      for (const word of uniqueWords) {
+        wordDocFreq.set(word, (wordDocFreq.get(word) || 0) + 1)
+      }
+    }
+
+    // 步骤2：计算每个词在所有文档中的 TF-IDF 累计值
+    const wordTFIDF = new Map()
+
+    for (const words of docsWords) {
+      if (words.length === 0) continue
+
+      // 计算当前文档的词频（TF）
+      const tf = new Map()
+      for (const word of words) {
+        tf.set(word, (tf.get(word) || 0) + 1)
+      }
+
+      // 按文档长度归一化 TF
+      const docLength = words.length
+
+      // 计算 TF-IDF 并累加
+      for (const [word, freq] of tf) {
+        const df = wordDocFreq.get(word)
+        // 平滑 IDF: log((N + 1) / (DF + 1)) + 1
+        // 防止除零并避免极端值
+        const idf = Math.log((docCount + 1) / (df + 1)) + 1
+
+        // 归一化 TF
+        const normalizedTF = freq / docLength
+
+        const tfidf = normalizedTF * idf
+
+        // 累加各文档的 TF-IDF 分数
+        wordTFIDF.set(word, (wordTFIDF.get(word) || 0) + tfidf)
+      }
+    }
+
+    // 步骤3：按 TF-IDF 分数排序并返回前 K 个
+    const sortedWords = Array.from(wordTFIDF.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, topK)
+
+    // 归一化权重到 0-1 范围
+    const maxWeight = sortedWords.length > 0 ? sortedWords[0][1] : 1
+
+    return sortedWords.map(([word, weight]) => ({
+      word,
+      weight: weight / maxWeight
+    }))
   }
 
   /**

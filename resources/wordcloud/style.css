@@ -92,7 +92,7 @@ body {
   background-clip: text;
 }
 
-/* Aqua 色渐变 - 用于時壹 */
+/* Aqua 色渐变 */
 .gradient-aqua {
   background: linear-gradient(to right, #00d4ff, #00bfa5);
   -webkit-background-clip: text;

@@ -27,6 +27,7 @@ export default class WordCloudGenerator {
       maxWords = this.config.maxWords || 100,
       minLength = this.config.minLength || 2,
       minFrequency = this.config.minFrequency || 2,
+      extractMethod = this.config.extractMethod || 'frequency',
       width = this.config.width || 1200,
       height = this.config.height || 800,
       backgroundColor = this.config.backgroundColor || '#ffffff'
@@ -38,51 +39,58 @@ export default class WordCloudGenerator {
     const quality = renderConfig.quality || 100
 
     try {
-      // 处理消息并生成词频统计
-      logger.info(`[群聊洞见] 开始生成词云，消息数: ${messages.length}`)
+      // 处理消息并生成词频统计或 TF-IDF 关键词
+      logger.info(`[群聊洞见] 开始生成词云，消息数: ${messages.length}，提取方式: ${extractMethod}`)
 
-      const wordCount = await this.textProcessor.processMessages(messages, {
+      const wordData = await this.textProcessor.processMessages(messages, {
         minLength,
         minFrequency,
-        maxWords
+        maxWords,
+        extractMethod
       })
 
-      if (wordCount.length === 0) {
+      if (wordData.length === 0) {
         logger.warn('[群聊洞见] 没有足够的词汇生成词云')
         return null
       }
 
-      logger.info(`[群聊洞见] 统计到 ${wordCount.length} 个词汇`)
+      logger.info(`[群聊洞见] 统计到 ${wordData.length} 个词汇`)
 
-      // 归一化词频到固定范围 (1-10)，确保词云大小可控
-      const frequencies = wordCount.map(item => item.count)
-      const maxFreq = Math.max(...frequencies)
-      const minFreq = Math.min(...frequencies)
-      const freqRange = maxFreq - minFreq
+      // 根据提取方式准备词云数据
+      let wordList
 
-      logger.info(`[群聊洞见] 频率范围: ${minFreq} - ${maxFreq}`)
+      if (extractMethod === 'tfidf') {
+        // TF-IDF 模式：wordData 格式为 [{word, weight}, ...]，weight 范围 0-1
+        // 缩放到 1-10 范围供 wordcloud2.js 使用
+        wordList = wordData.map(item => {
+          const scaledWeight = 1 + item.weight * 9  // 映射 0-1 到 1-10
+          return [item.word, scaledWeight]
+        })
+        logger.debug(`[群聊洞见] TF-IDF 权重范围: ${wordData[wordData.length - 1]?.weight?.toFixed(4) || 0} - ${wordData[0]?.weight?.toFixed(4) || 1}`)
+      } else {
+        // 词频模式：wordData 格式为 [{word, count}, ...]
+        // 使用对数缩放归一化
+        const frequencies = wordData.map(item => item.count)
+        const maxFreq = Math.max(...frequencies)
+        const minFreq = Math.min(...frequencies)
+        const freqRange = maxFreq - minFreq
 
-      // 准备词云数据（wordcloud2.js 格式：[词, 相对倍率]）
-      // 使用对数缩放将真实频率映射到 1-10 范围
-      const wordList = wordCount.map(item => {
-        let normalizedWeight
-        if (freqRange === 0) {
-          // 所有词频率相同，使用固定权重
-          normalizedWeight = 5
-        } else {
-          // 对数缩放: log(freq) 映射到 1-10
-          // 使用自然对数压缩差异，让高频词和低频词的大小差异更合理
-          const logFreq = Math.log(item.count)
-          const logMin = Math.log(minFreq)
-          const logMax = Math.log(maxFreq)
-          const logRange = logMax - logMin
+        logger.info(`[群聊洞见] 频率范围: ${minFreq} - ${maxFreq}`)
 
-          // 映射到 1-10 范围
-          normalizedWeight = 1 + ((logFreq - logMin) / logRange) * 9
-        }
-
-        return [item.word, normalizedWeight]
-      })
+        wordList = wordData.map(item => {
+          let normalizedWeight
+          if (freqRange === 0) {
+            normalizedWeight = 5
+          } else {
+            const logFreq = Math.log(item.count)
+            const logMin = Math.log(minFreq)
+            const logMax = Math.log(maxFreq)
+            const logRange = logMax - logMin
+            normalizedWeight = 1 + ((logFreq - logMin) / logRange) * 9
+          }
+          return [item.word, normalizedWeight]
+        })
+      }
 
       // 准备模板数据
       const templateData = {

@@ -1,7 +1,7 @@
 # 群聊信息管理插件配置文件
 
 # 配置文件版本号（请勿手动修改）
-configVersion: 2
+configVersion: 3
 
 groupManager:
   # 消息保留天数
@@ -105,6 +105,11 @@ groupManager:
     # standard - 标准：+ 副词(很/太)、连词(和/或)、代词(我/你) [推荐]
     # strict - 严格：+ 量词(个/些)、时间词(现在/刚才)、方位词(上/下)、数词
     filterStrength: standard
+
+    # 关键词提取方式
+    # frequency - 词频统计：简单直接，高频词排在前面
+    # tfidf - TF-IDF 算法：突出具有区分性的词汇，降低普遍出现的词权重
+    extractMethod: tfidf
 
     # 画布尺寸（优化后词语更大更密集，使用标准尺寸）
     width: 1200
