@@ -414,20 +414,22 @@ export default class MessageCollector {
    * @param {string} userId - 用户ID
    * @param {number} count - 消息数量
    * @param {number} beforeTime - 时间戳(秒),只获取该时间点之前的消息
+   * @param {number|null} days - 指定天数，设置后忽略 count 限制，获取该天数内的所有消息
    * @returns {Array} 消息数组,按时间倒序排列
    */
-  async getRecentUserMessages(groupId, userId, count = 1, beforeTime = null) {
+  async getRecentUserMessages(groupId, userId, count = 1, beforeTime = null, days = null) {
     try {
       const userMessages = []
       const targetUserId = parseInt(userId)
 
-      logger.debug(`开始查询用户 ${targetUserId} 在 ${beforeTime} 之前的 ${count} 条消息`)
+      // 如果指定了 days，则获取该天数内的所有消息，忽略 count 限制
+      const queryDays = days || this.redisHelper.retentionDays
+      const useCountLimit = days === null
 
-      // 获取最近7天的消息(从retentionDays配置读取)
-      const days = this.redisHelper.retentionDays
+      logger.debug(`开始查询用户 ${targetUserId} 的消息，天数: ${queryDays}，数量限制: ${useCountLimit ? count : '无'}`)
 
       // 从今天开始往前查询
-      for (let i = 0; i < days && userMessages.length < count; i++) {
+      for (let i = 0; i < queryDays && (useCountLimit ? userMessages.length < count : true); i++) {
         const date = moment().subtract(i, 'days').format('YYYY-MM-DD')
         const key = this.redisHelper.getMessageKey(groupId, date)
 
@@ -442,7 +444,7 @@ export default class MessageCollector {
         }
 
         // 倒序遍历(从最新的消息开始)
-        for (let j = dayMessages.length - 1; j >= 0 && userMessages.length < count; j--) {
+        for (let j = dayMessages.length - 1; j >= 0 && (useCountLimit ? userMessages.length < count : true); j--) {
           try {
             const msg = JSON.parse(dayMessages[j])
 
@@ -474,8 +476,8 @@ export default class MessageCollector {
       // 按时间倒序排列(最新的在前)
       userMessages.sort((a, b) => b.time - a.time)
 
-      logger.debug(`最终获取到 ${userMessages.length} 条上下文消息`)
-      return userMessages.slice(0, count)
+      logger.debug(`最终获取到 ${userMessages.length} 条用户消息`)
+      return useCountLimit ? userMessages.slice(0, count) : userMessages
     } catch (err) {
       logger.error(`获取用户最近消息失败: ${err}`)
       return []

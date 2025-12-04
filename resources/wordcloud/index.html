@@ -10,7 +10,11 @@
 <body>
   <div class="container">
     <div class="header">
+      {{if isPersonal}}
+      <h1 class="title">{{userName}} 的词云</h1>
+      {{else}}
       <h1 class="title">群聊词云</h1>
+      {{/if}}
       <div class="info">
         <span class="group-name">{{groupName}}</span>
         <span class="time-range">{{timeRange}}</span>

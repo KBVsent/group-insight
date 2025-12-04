@@ -25,6 +25,7 @@ export default class WordCloudGenerator {
       groupId = 'Unknown',
       groupName = '未知群聊',
       days = 1,
+      userName = null,  // Personal word cloud user name
       maxWords = this.config.maxWords || 100,
       minLength = this.config.minLength || 2,
       minFrequency = this.config.minFrequency || 2,
@@ -103,7 +104,9 @@ export default class WordCloudGenerator {
         width,
         height,
         backgroundColor,
-        pluResPath: PLUGIN_ROOT + '/resources/'
+        pluResPath: PLUGIN_ROOT + '/resources/',
+        userName: userName || '',  // Personal word cloud user name
+        isPersonal: !!userName      // Flag for template to show personal title
       }
 
       // 渲染模板（使用高质量参数）
