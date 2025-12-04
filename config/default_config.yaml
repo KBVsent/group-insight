@@ -109,7 +109,7 @@ groupManager:
     # 关键词提取方式
     # frequency - 词频统计：简单直接，高频词排在前面
     # tfidf - TF-IDF 算法：突出具有区分性的词汇，降低普遍出现的词权重
-    extractMethod: tfidf
+    extractMethod: frequency
 
     # 画布尺寸（优化后词语更大更密集，使用标准尺寸）
     width: 1200

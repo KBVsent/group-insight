@@ -100,52 +100,41 @@ pnpm restart
 
 ## 核心配置
 
-在 `plugins/group-insight/config/config.yaml` 中可自定义:
+在 `config/config.yaml` 中可自定义，完整配置项请参考 [`config/default_config.yaml`](config/default_config.yaml)。
 
-```yaml
-groupManager:
-  # 消息保留天数
-  retentionDays: 7
+### 词云自定义词典
 
-  # 艾特记录保留时间(小时)
-  atRetentionHours: 24
+插件支持自定义词典和过滤词，用于优化词云分词效果。首次运行后，需自行在 `config/` 目录下创建这两个文件，修改后重启生效。
 
-  # AI 配置
-  ai:
-    apiKey: ''              # API Key (必填)
-    model: 'gpt-4.1'  # 模型名称 (必填)
-    baseURL: ''             # API 端点 (必填)
-    maxTokens: 20000        # 最大 Token
+<details>
+<summary>查看词典格式说明</summary>
 
-  # AI 分析开关
-  analysis:
-    topic:
-      enabled: true         # 话题分析
-      max_topics: 5
-    goldenQuote:
-      enabled: true         # 金句提取
-      max_golden_quotes: 5
-    userTitle:
-      enabled: true         # 用户称号
-      max_user_titles: 8
-    activity:
-      enabled: true         # 活跃度图表
-    min_messages_threshold: 20  # 最少消息数(低于此数跳过分析)
+#### 自定义词典 (`config/userdict.txt`)
 
-  # 定时任务配置
-  schedule:
-    enabled: false          # 是否启用
-    whitelist: []           # 白名单群列表(为空则不执行)
-    minMessages: 99         # 最少消息数
-    cooldownMinutes: 60     # 冷却时长(分钟)
-    # 执行时间: 每天 23:59 (在 apps/report.js 中配置)
+让分词器正确识别特定词汇（如游戏角色名、专有名词），避免被错误切分。
 
-  # 词云配置
-  wordCloud:
-    maxWords: 100           # 最多显示词数
-    width: 1200             # 画布宽度
-    height: 800             # 画布高度
+```text
+# 格式：词语 词频(可选) 词性(可选)
+# 词频越高，该词被分出的概率越大
+千恋万花 10 nr
+八重神子 10 nr
+鸣潮
+碧蓝档案
 ```
+
+#### 过滤词 (`config/stopwords.txt`)
+
+这些词不会出现在词云中，用于过滤无意义的词汇或者Bot指令。
+
+```text
+# 每行一个词，支持 # 开头的注释
+的
+了
+是
+# 可添加群内特定词汇
+```
+
+</details>
 
 ## 依赖说明
 
@@ -159,26 +148,36 @@ groupManager:
 
 ## 常见问题
 
-### AI 分析失败
+<details>
+<summary>AI 分析失败</summary>
 
 1. 检查 API Key 是否正确配置
 2. 检查 `baseURL` 是否与服务商匹配
 3. 查看错误日志：`pnpm log`
 4. 确认 API 额度充足
 
-### 消息收集不工作
+</details>
+
+<details>
+<summary>消息收集不工作</summary>
 
 1. 确认 Redis 运行正常
 2. 检查配置文件存在: `plugins/group-insight/config/config.yaml`
 3. 重启 Yunzai
 
-### 配置修改后未生效
+</details>
+
+<details>
+<summary>配置修改后未生效</summary>
 
 1. 检查 YAML 语法是否正确(注意缩进)
 2. 查看控制台日志是否有 "配置变更" 提示
 3. 如果没有自动重载,手动重启 Yunzai
 
-### 批次生成失败
+</details>
+
+<details>
+<summary>批次生成失败</summary>
 
 当群消息量大时（>1000条），插件会自动分批次分析。如遇批次失败：
 
@@ -186,7 +185,12 @@ groupManager:
 2. 失败批次标记 `retried=true` 后不会重复尝试
 3. 检查 AI API Key 和网络连接
 
+</details>
+
 ## 技术架构
+
+<details>
+<summary>查看技术细节</summary>
 
 ### 目录结构
 
@@ -216,6 +220,8 @@ plugins/group-insight/
   - 增量 AI 分析 (80% Token 节省)
 - **Redis 存储** - 消息自动过期、@记录精确过期、原子批量操作
 - **资源管理** - 进程退出钩子,自动清理事件监听器和定时任务
+
+</details>
 
 
 ## 致谢

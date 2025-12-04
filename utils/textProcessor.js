@@ -5,7 +5,7 @@
 
 import fs from 'fs'
 import Config from '../components/Config.js'
-import { STOPWORDS_PATH } from '#paths'
+import { STOPWORDS_PATH, USERDICT_PATH } from '#paths'
 
 export default class TextProcessor {
   constructor() {
@@ -22,23 +22,26 @@ export default class TextProcessor {
     if (this.initialized) return
 
     try {
-      // 动态导入 jieba-wasm（需要先安装）
+      // 动态导入 jieba-wasm
       const jiebaWasm = await import('jieba-wasm')
-      const { cut, tag } = jiebaWasm
+      const { cut, tag, add_word, with_dict } = jiebaWasm
 
-      // 创建 API 适配器包装器,确保与原 nodejieba API 兼容
+      // 创建 API 适配器包装器
       this.jieba = {
-        cut: (text) => cut(text, true),  // 第二个参数为 true 启用 HMM 模式,提高分词准确度
-        tag: (text) => tag(text, true)   // 词性标注功能
+        cut: (text) => cut(text, true),  // 第二个参数为 true 启用 HMM 模式
+        tag: (text) => tag(text, true),  // 词性标注功能
+        add_word,                         // 添加单个词
+        with_dict                         // 批量加载自定义词典
       }
-
-      // 加载停用词
-      const stopwordsData = fs.readFileSync(STOPWORDS_PATH, 'utf8')
-      const stopwords = JSON.parse(stopwordsData)
-      this.stopwords = new Set(stopwords)
 
       // 加载配置
       this.config = Config.get()
+
+      // 加载自定义词典
+      this.loadUserDict()
+
+      // 加载过滤词
+      this.loadStopwords()
 
       this.initialized = true
       logger.debug('[群聊洞见] 文本处理器初始化成功 (jieba-wasm + 词性标注)')
@@ -46,6 +49,58 @@ export default class TextProcessor {
       logger.error(`[群聊洞见] 文本处理器初始化失败: ${err}`)
       logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
       this.initialized = false
+    }
+  }
+
+  /**
+   * 加载自定义词典
+   * 让分词器正确识别特定词汇
+   */
+  loadUserDict() {
+    if (!fs.existsSync(USERDICT_PATH)) {
+      logger.debug(`[群聊洞见] 自定义词典文件不存在: ${USERDICT_PATH}`)
+      return
+    }
+
+    try {
+      const dictContent = fs.readFileSync(USERDICT_PATH, 'utf8')
+      // 过滤空行和注释行
+      const cleanContent = dictContent
+        .split('\n')
+        .filter(line => line.trim() && !line.trim().startsWith('#'))
+        .join('\n')
+
+      if (cleanContent) {
+        this.jieba.with_dict(cleanContent)
+        const wordCount = cleanContent.split('\n').length
+        logger.info(`[群聊洞见] 已加载自定义词典 (${wordCount} 词)`)
+      }
+    } catch (err) {
+      logger.warn(`[群聊洞见] 加载自定义词典失败: ${err}`)
+    }
+  }
+
+  /**
+   * 加载过滤词
+   * 这些词不会出现在词云中
+   */
+  loadStopwords() {
+    if (!fs.existsSync(STOPWORDS_PATH)) {
+      logger.debug(`[群聊洞见] 过滤词文件不存在: ${STOPWORDS_PATH}`)
+      return
+    }
+
+    try {
+      const content = fs.readFileSync(STOPWORDS_PATH, 'utf8')
+      const words = content
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'))
+
+      this.stopwords = new Set(words)
+      logger.info(`[群聊洞见] 已加载过滤词 (${this.stopwords.size} 词)`)
+    } catch (err) {
+      logger.warn(`[群聊洞见] 加载过滤词失败: ${err}`)
     }
   }
 

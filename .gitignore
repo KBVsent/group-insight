@@ -5,3 +5,5 @@
 /*.md
 !/README.md
 /scripts
+stopwords.txt
+userdict.txt
