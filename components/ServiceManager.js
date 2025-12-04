@@ -7,6 +7,8 @@
  * - 状态追踪
  */
 
+import { logger } from '#lib'
+
 /**
  * 服务状态枚举
  */

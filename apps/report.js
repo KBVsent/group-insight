@@ -15,6 +15,7 @@ import {
   getUserTitleAnalyzer
 } from '../components/index.js'
 import { RESOURCES_DIR, SUMMARY_TEMPLATE_PATH } from '#paths'
+import { logger } from '#lib'
 
 export class ReportPlugin extends plugin {
   constructor() {
@@ -80,21 +81,21 @@ export class ReportPlugin extends plugin {
     if (config?.analysis?.activity?.enabled !== false) enabledFeatures.push('活跃度图表')
 
     if (enabledFeatures.length > 0) {
-      logger.info(`[群聊洞见-报告] 增强分析功能已启用: ${enabledFeatures.join('、')}`)
+      logger.info(`[报告] 增强分析功能已启用: ${enabledFeatures.join('、')}`)
     }
 
     // 显示 AI 服务状态
     if (!aiService) {
-      logger.warn('[群聊洞见-报告] AI 服务未启用，将使用基础统计功能')
+      logger.warn('[报告] AI 服务未启用，将使用基础统计功能')
     }
 
     // 显示定时总结状态
     const scheduleEnabled = config?.schedule?.enabled !== false
     const whitelist = config?.schedule?.whitelist || []
     if (scheduleEnabled && whitelist.length > 0) {
-      logger.info(`[群聊洞见-报告] 定时总结已启用，白名单群数: ${whitelist.length}`)
+      logger.info(`[报告] 定时总结已启用，白名单群数: ${whitelist.length}`)
     } else {
-      logger.info('[群聊洞见-报告] 定时总结未启用（需配置白名单群）')
+      logger.info('[报告] 定时总结未启用（需配置白名单群）')
     }
 
   }
@@ -143,7 +144,7 @@ export class ReportPlugin extends plugin {
 
       return { inCooldown: false, remainingMinutes: 0, lastGenerated: null }
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 检查冷却状态失败: ${err}`)
+      logger.error(`[报告] 检查冷却状态失败: ${err}`)
       // 发生错误时允许生成（避免阻塞用户）
       return { inCooldown: false, remainingMinutes: 0, lastGenerated: null }
     }
@@ -169,9 +170,9 @@ export class ReportPlugin extends plugin {
       // 设置过期时间为24小时（跨日自动清理）
       await redis.expire(cooldownKey, 86400)
 
-      logger.debug(`[群聊洞见-报告] 已设置冷却标记: 群 ${groupId}, 来源: ${generatedBy}`)
+      logger.debug(`[报告] 已设置冷却标记: 群 ${groupId}, 来源: ${generatedBy}`)
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 设置冷却标记失败: ${err}`)
+      logger.error(`[报告] 设置冷却标记失败: ${err}`)
     }
   }
 
@@ -187,7 +188,7 @@ export class ReportPlugin extends plugin {
       const lockValue = await redis.get(lockKey)
       return !!lockValue
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 检查生成锁失败: ${err}`)
+      logger.error(`[报告] 检查生成锁失败: ${err}`)
       return false
     }
   }
@@ -205,13 +206,13 @@ export class ReportPlugin extends plugin {
       // 使用 SETNX 确保原子性获取锁
       const result = await redis.set(lockKey, Date.now().toString(), 'EX', ttl, 'NX')
       if (result) {
-        logger.debug(`[群聊洞见-报告] 获取生成锁成功: 群 ${groupId}, 日期 ${date}`)
+        logger.debug(`[报告] 获取生成锁成功: 群 ${groupId}, 日期 ${date}`)
         return true
       }
-      logger.debug(`[群聊洞见-报告] 获取生成锁失败（已被占用）: 群 ${groupId}, 日期 ${date}`)
+      logger.debug(`[报告] 获取生成锁失败（已被占用）: 群 ${groupId}, 日期 ${date}`)
       return false
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 获取生成锁失败: ${err}`)
+      logger.error(`[报告] 获取生成锁失败: ${err}`)
       return false
     }
   }
@@ -225,9 +226,9 @@ export class ReportPlugin extends plugin {
     try {
       const lockKey = `Yz:groupManager:generating:${groupId}:${date}`
       await redis.del(lockKey)
-      logger.debug(`[群聊洞见-报告] 释放生成锁: 群 ${groupId}, 日期 ${date}`)
+      logger.debug(`[报告] 释放生成锁: 群 ${groupId}, 日期 ${date}`)
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 释放生成锁失败: ${err}`)
+      logger.error(`[报告] 释放生成锁失败: ${err}`)
     }
   }
 
@@ -237,7 +238,7 @@ export class ReportPlugin extends plugin {
   async scheduledReport() {
     const messageCollector = await getMessageCollector()
     if (!messageCollector) {
-      logger.warn('[群聊洞见-报告] 定时报告功能未就绪')
+      logger.warn('[报告] 定时报告功能未就绪')
       return
     }
 
@@ -250,13 +251,13 @@ export class ReportPlugin extends plugin {
 
     // 检查是否启用
     if (!enabled || whitelist.length === 0) {
-      logger.debug('[群聊洞见-报告] 定时报告未启用或白名单为空，跳过')
+      logger.debug('[报告] 定时报告未启用或白名单为空，跳过')
       return
     }
 
     // 固定目标日期为任务触发时的"今天"，避免跨日边界问题
     const targetDate = moment().format('YYYY-MM-DD')
-    logger.mark(`[群聊洞见-报告] 开始执行定时报告任务 (目标日期: ${targetDate}, 白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
+    logger.mark(`[报告] 开始执行定时报告任务 (目标日期: ${targetDate}, 白名单群数: ${whitelist.length}, 并发数: ${concurrency})`)
 
     // 使用并发限制处理白名单群
     const results = await this.runWithConcurrency(
@@ -267,19 +268,19 @@ export class ReportPlugin extends plugin {
           const messages = await messageCollector.getMessages(groupId, 1, targetDate)
 
           if (messages.length < minMessages) {
-            logger.debug(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
+            logger.debug(`[报告] 群 ${groupId} ${targetDate} 消息数 (${messages.length}) 少于阈值 (${minMessages})，跳过报告`)
             return { groupId, status: 'skipped', reason: 'insufficient_messages' }
           }
 
           // 检查是否正在生成中（避免与用户手动触发冲突）
           if (await this.isGenerating(groupId, targetDate)) {
-            logger.info(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 报告正在生成中，跳过定时任务`)
+            logger.info(`[报告] 群 ${groupId} ${targetDate} 报告正在生成中，跳过定时任务`)
             return { groupId, status: 'skipped', reason: 'already_generating' }
           }
 
           // 尝试获取生成锁
           if (!await this.acquireGeneratingLock(groupId, targetDate)) {
-            logger.info(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 获取锁失败，跳过定时任务`)
+            logger.info(`[报告] 群 ${groupId} ${targetDate} 获取锁失败，跳过定时任务`)
             return { groupId, status: 'skipped', reason: 'lock_failed' }
           }
 
@@ -294,15 +295,15 @@ export class ReportPlugin extends plugin {
                 groupName = groupInfo?.group_name || groupInfo?.name || groupName
               }
             } catch (err) {
-              logger.debug(`[群聊洞见-报告] 获取群 ${groupId} 名称失败，使用默认名称`)
+              logger.debug(`[报告] 获取群 ${groupId} 名称失败，使用默认名称`)
             }
 
             // 执行分析
-            logger.info(`[群聊洞见-报告] 正在为群 ${groupId} (${groupName}) 生成 ${targetDate} 报告 (消息数: ${messages.length})`)
+            logger.info(`[报告] 正在为群 ${groupId} (${groupName}) 生成 ${targetDate} 报告 (消息数: ${messages.length})`)
             const analysisResults = await this.performAnalysis(messages, 1, groupId, targetDate)
 
             if (!analysisResults) {
-              logger.warn(`[群聊洞见-报告] 群 ${groupId} 报告生成失败：分析失败`)
+              logger.warn(`[报告] 群 ${groupId} 报告生成失败：分析失败`)
               return { groupId, status: 'failed', error: 'analysis_failed' }
             }
 
@@ -319,14 +320,14 @@ export class ReportPlugin extends plugin {
             // 设置冷却标记（防止定时任务后1小时内频繁手动触发）
             await this.setCooldown(groupId, 'scheduled', messages.length)
 
-            logger.mark(`[群聊洞见-报告] 群 ${groupId} ${targetDate} 报告生成成功 (${messages.length} 条消息)`)
+            logger.mark(`[报告] 群 ${groupId} ${targetDate} 报告生成成功 (${messages.length} 条消息)`)
             return { groupId, status: 'success', messageCount: messages.length }
           } finally {
             // 无论成功失败都释放锁
             await this.releaseGeneratingLock(groupId, targetDate)
           }
         } catch (err) {
-          logger.error(`[群聊洞见-报告] 群 ${groupId} 定时报告异常: ${err}`)
+          logger.error(`[报告] 群 ${groupId} 定时报告异常: ${err}`)
           return { groupId, status: 'error', error: err.message }
         }
       },
@@ -342,7 +343,7 @@ export class ReportPlugin extends plugin {
       error: results.filter(r => r.status === 'error').length
     }
 
-    logger.mark(`[群聊洞见-报告] 定时报告任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
+    logger.mark(`[报告] 定时报告任务执行完成 - 总数: ${summary.total}, 成功: ${summary.success}, 失败: ${summary.failed}, 跳过: ${summary.skipped}, 异常: ${summary.error}`)
   }
 
   /**
@@ -431,7 +432,7 @@ export class ReportPlugin extends plugin {
         // 在冷却期内且有缓存 → 直接返回缓存
         if (cooldown.inCooldown && report) {
           const elapsedMinutes = cooldown.lastGenerated?.elapsedMinutes || 0
-          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的今天报告（冷却中，${elapsedMinutes}分钟前已生成）`)
+          logger.info(`[报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的今天报告（冷却中，${elapsedMinutes}分钟前已生成）`)
 
           const img = await this.renderReport(report, {
             groupName,
@@ -467,7 +468,7 @@ export class ReportPlugin extends plugin {
         try {
           await this.reply(`正在生成今天的群聊报告（${messages.length}条消息），请稍候...`)
 
-          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的今天报告 (消息数: ${messages.length})`)
+          logger.info(`[报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的今天报告 (消息数: ${messages.length})`)
 
           const analysisResults = await this.performAnalysis(messages, 1, e.group_id, queryDate)
 
@@ -486,7 +487,7 @@ export class ReportPlugin extends plugin {
 
           await this.setCooldown(e.group_id, 'user', messages.length)
 
-          logger.mark(`[群聊洞见-报告] 用户触发今天报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+          logger.mark(`[报告] 用户触发今天报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
           const savedReport = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
           const img = await this.renderReport(savedReport || analysisResults, {
@@ -525,7 +526,7 @@ export class ReportPlugin extends plugin {
 
         // 消息数差异 <= 50 条 → 使用缓存（历史已定型）
         if (messageDiff <= 50) {
-          logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告（缓存有效，消息差异: ${messageDiff}条）`)
+          logger.info(`[报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告（缓存有效，消息差异: ${messageDiff}条）`)
 
           const img = await this.renderReport(report, {
             groupName,
@@ -542,7 +543,7 @@ export class ReportPlugin extends plugin {
         }
 
         // 消息数差异 > 50 条 → 无视冷却，重新生成
-        logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告 - 消息数差异过大 (缓存: ${cachedMessageCount}, 当前: ${currentMessageCount}, 差异: ${messageDiff})，将重新生成`)
+        logger.info(`[报告] 用户 ${e.user_id} 查询群 ${e.group_id} 的${dateLabel}报告 - 消息数差异过大 (缓存: ${cachedMessageCount}, 当前: ${currentMessageCount}, 差异: ${messageDiff})，将重新生成`)
       }
 
       // 无缓存或差异过大 → 生成报告
@@ -561,7 +562,7 @@ export class ReportPlugin extends plugin {
       try {
         await this.reply(`正在生成${dateLabel}的群聊报告（${messages.length}条消息），请稍候...`)
 
-        logger.info(`[群聊洞见-报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
+        logger.info(`[报告] 用户 ${e.user_id} 触发生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
 
         const analysisResults = await this.performAnalysis(messages, 1, e.group_id, queryDate)
 
@@ -580,7 +581,7 @@ export class ReportPlugin extends plugin {
 
         // 历史日期不设置冷却，生成后即为定型报告，再次触发会直接使用缓存
 
-        logger.mark(`[群聊洞见-报告] 用户触发${dateLabel}报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+        logger.mark(`[报告] 用户触发${dateLabel}报告生成成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
         const savedReport = await messageCollector.redisHelper.getReport(e.group_id, queryDate)
         const img = await this.renderReport(savedReport || analysisResults, {
@@ -600,7 +601,7 @@ export class ReportPlugin extends plugin {
         await this.releaseGeneratingLock(e.group_id, queryDate)
       }
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 查询报告错误: ${err}`)
+      logger.error(`[报告] 查询报告错误: ${err}`)
       return this.reply(`查询报告失败: ${err.message}`, true)
     }
   }
@@ -709,7 +710,7 @@ export class ReportPlugin extends plugin {
           groupName = `群${e.group_id}`
         }
 
-        logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
+        logger.info(`[报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
 
         // 执行分析（强制重新生成，不使用批次缓存）
         const analysisResults = await this.performAnalysis(messages, 1, e.group_id, targetDate, { forceRegenerate: true })
@@ -731,7 +732,7 @@ export class ReportPlugin extends plugin {
         // 设置冷却标记（主人下次触发依然会无视冷却）
         await this.setCooldown(e.group_id, 'master', messages.length)
 
-        logger.mark(`[群聊洞见-报告] 主人强制生成${dateLabel}报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
+        logger.mark(`[报告] 主人强制生成${dateLabel}报告成功 - 群 ${e.group_id}, 消息数: ${messages.length}`)
 
         // 渲染并发送报告
         const savedReport = await messageCollector.redisHelper.getReport(e.group_id, targetDate)
@@ -752,7 +753,7 @@ export class ReportPlugin extends plugin {
         await this.releaseGeneratingLock(e.group_id, targetDate)
       }
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 强制生成报告错误: ${err}`)
+      logger.error(`[报告] 强制生成报告错误: ${err}`)
       return this.reply(`生成报告失败: ${err.message}`, true)
     }
   }
@@ -780,16 +781,16 @@ export class ReportPlugin extends plugin {
       const maxMessages = config.ai?.maxMessages || 1000
       const contextOverlap = 50 // 上下文重叠消息数
 
-      logger.info(`[群聊洞见-报告] 开始增强分析 (消息数: ${messages.length}${forceRegenerate ? ', 强制重新生成' : ''})`)
+      logger.info(`[报告] 开始增强分析 (消息数: ${messages.length}${forceRegenerate ? ', 强制重新生成' : ''})`)
 
       // 1. 基础统计分析
       const stats = statisticsService.analyze(messages)
-      logger.info(`[群聊洞见-报告] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
+      logger.info(`[报告] 基础统计完成 - 参与用户: ${stats.basic.totalUsers}`)
 
       // 检查是否满足最小消息数阈值
       const minThreshold = config?.analysis?.min_messages_threshold || 20
       if (messages.length < minThreshold) {
-        logger.warn(`[群聊洞见-报告] 消息数 (${messages.length}) 少于阈值 (${minThreshold}), 跳过 AI 分析`)
+        logger.warn(`[报告] 消息数 (${messages.length}) 少于阈值 (${minThreshold}), 跳过 AI 分析`)
         return {
           stats,
           topics: [],
@@ -818,7 +819,7 @@ export class ReportPlugin extends plugin {
           const completedBatches = Math.floor(messages.length / maxMessages)
           const remainingMessages = messages.length % maxMessages
 
-          logger.info(`[群聊洞见-报告] 消息总数: ${messages.length}, 完整批次: ${completedBatches}, 剩余: ${remainingMessages}`)
+          logger.info(`[报告] 消息总数: ${messages.length}, 完整批次: ${completedBatches}, 剩余: ${remainingMessages}`)
 
           // 获取所有批次的缓存（只使用成功的批次，忽略失败/缺失的）
           const batchCaches = []
@@ -827,7 +828,7 @@ export class ReportPlugin extends plugin {
 
           // 强制重新生成时，将所有批次都当作缺失批次重新分析
           if (forceRegenerate) {
-            logger.info(`[群聊洞见-报告] 强制重新生成模式，将重新分析所有 ${completedBatches} 个批次`)
+            logger.info(`[报告] 强制重新生成模式，将重新分析所有 ${completedBatches} 个批次`)
             for (let i = 0; i < completedBatches; i++) {
               missingBatches.push(i)
             }
@@ -850,28 +851,28 @@ export class ReportPlugin extends plugin {
                       batchTokenUsage.total_tokens += parsed.tokenUsage.total_tokens || 0
                     }
 
-                    logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}, Tokens: ${parsed.tokenUsage?.total_tokens || 0}`)
+                    logger.info(`[报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}, Tokens: ${parsed.tokenUsage?.total_tokens || 0}`)
                   } else {
                     // 仅当未重试过时才加入重试列表
                     if (!parsed.retried) {
                       failedBatches.push(i)
-                      logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，将尝试重试`)
+                      logger.warn(`[报告] 批次${i}分析曾失败，将尝试重试`)
                     } else {
-                      logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败且已重试过，跳过此批次`)
+                      logger.warn(`[报告] 批次${i}分析曾失败且已重试过，跳过此批次`)
                     }
                   }
                 } catch (err) {
-                  logger.error(`[群聊洞见-报告] 批次${i}缓存解析失败: ${err}`)
+                  logger.error(`[报告] 批次${i}缓存解析失败: ${err}`)
                   failedBatches.push(i)
                 }
               } else {
                 missingBatches.push(i)
-                logger.info(`[群聊洞见-报告] 批次${i}缓存不存在，需要补全`)
+                logger.info(`[报告] 批次${i}缓存不存在，需要补全`)
               }
             }
           }
 
-          logger.info(`[群聊洞见-报告] 批次状态检查: 成功=${batchCaches.length}, 失败=${failedBatches.length}, 缺失=${missingBatches.length}`)
+          logger.info(`[报告] 批次状态检查: 成功=${batchCaches.length}, 失败=${failedBatches.length}, 缺失=${missingBatches.length}`)
 
           // 重试缺失和失败的批次
           if (missingBatches.length > 0 || failedBatches.length > 0) {
@@ -893,7 +894,7 @@ export class ReportPlugin extends plugin {
             }
 
             if (retryResult.stillFailedBatches.length > 0) {
-              logger.warn(`[群聊洞见-报告] 批次补全后仍有 ${retryResult.stillFailedBatches.length} 个批次失败: [${retryResult.stillFailedBatches.join(', ')}]`)
+              logger.warn(`[报告] 批次补全后仍有 ${retryResult.stillFailedBatches.length} 个批次失败: [${retryResult.stillFailedBatches.join(', ')}]`)
             }
           }
 
@@ -909,12 +910,12 @@ export class ReportPlugin extends plugin {
             let mergedQuotes = []
 
             for (const batch of batchCaches) {
-              logger.debug(`[群聊洞见-报告] 合并批次${batch.batchIndex} - 话题: ${batch.topics?.length || 0}, 金句: ${batch.goldenQuotes?.length || 0}`)
+              logger.debug(`[报告] 合并批次${batch.batchIndex} - 话题: ${batch.topics?.length || 0}, 金句: ${batch.goldenQuotes?.length || 0}`)
               mergedTopics = this.mergeTopics(mergedTopics, batch.topics || [])
               mergedQuotes = this.mergeGoldenQuotes(mergedQuotes, batch.goldenQuotes || [])
             }
 
-            logger.info(`[群聊洞见-报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}`)
+            logger.info(`[报告] 已合并${batchCaches.length}/${completedBatches}个批次 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}`)
 
             // 如果有剩余消息，分析增量部分
             if (remainingMessages > 0) {
@@ -924,14 +925,14 @@ export class ReportPlugin extends plugin {
                 ...messages.slice(lastBatchEnd) // 增量消息
               ]
 
-              logger.info(`[群聊洞见-报告] 分析增量消息: ${incrementalMessages.length}条 (含${contextOverlap}条上下文)`)
+              logger.info(`[报告] 分析增量消息: ${incrementalMessages.length}条 (含${contextOverlap}条上下文)`)
 
               const [incrementalTopics, incrementalQuotes] = await Promise.all([
                 config?.analysis?.topic?.enabled !== false && topicAnalyzer
                   ? topicAnalyzer.analyze(incrementalMessages, stats)
                       .then(result => ({ topics: result.topics, usage: result.usage }))
                       .catch(err => {
-                        logger.error(`[群聊洞见-报告] 增量话题分析失败: ${err}`)
+                        logger.error(`[报告] 增量话题分析失败: ${err}`)
                         return { topics: [], usage: null }
                       })
                   : Promise.resolve({ topics: [], usage: null }),
@@ -940,31 +941,31 @@ export class ReportPlugin extends plugin {
                   ? goldenQuoteAnalyzer.analyze(incrementalMessages, stats)
                       .then(result => ({ goldenQuotes: result.goldenQuotes, usage: result.usage }))
                       .catch(err => {
-                        logger.error(`[群聊洞见-报告] 增量金句分析失败: ${err}`)
+                        logger.error(`[报告] 增量金句分析失败: ${err}`)
                         return { goldenQuotes: [], usage: null }
                       })
                   : Promise.resolve({ goldenQuotes: [], usage: null })
               ])
 
               // 合并增量结果
-              logger.debug(`[群聊洞见-报告] 增量分析结果 - 话题: ${incrementalTopics.topics?.length || 0}, 金句: ${incrementalQuotes.goldenQuotes?.length || 0}`)
-              logger.debug(`[群聊洞见-报告] 合并前批次缓存 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}`)
+              logger.debug(`[报告] 增量分析结果 - 话题: ${incrementalTopics.topics?.length || 0}, 金句: ${incrementalQuotes.goldenQuotes?.length || 0}`)
+              logger.debug(`[报告] 合并前批次缓存 - 话题: ${mergedTopics.length}, 金句: ${mergedQuotes.length}`)
 
               topics = this.mergeTopics(mergedTopics, incrementalTopics.topics || [])
               goldenQuotes = this.mergeGoldenQuotes(mergedQuotes, incrementalQuotes.goldenQuotes || [])
               topicUsage = incrementalTopics.usage
               quoteUsage = incrementalQuotes.usage
 
-              logger.info(`[群聊洞见-报告] 增量合并完成 - 最终话题: ${topics.length}, 金句: ${goldenQuotes.length}`)
+              logger.info(`[报告] 增量合并完成 - 最终话题: ${topics.length}, 金句: ${goldenQuotes.length}`)
             } else {
               // 没有增量消息，直接使用合并的批次结果
               topics = mergedTopics
               goldenQuotes = mergedQuotes
-              logger.info(`[群聊洞见-报告] 无增量消息，使用批次缓存结果 - 话题: ${topics.length}, 金句: ${goldenQuotes.length}`)
+              logger.info(`[报告] 无增量消息，使用批次缓存结果 - 话题: ${topics.length}, 金句: ${goldenQuotes.length}`)
             }
           }
         } catch (err) {
-          logger.error(`[群聊洞见-报告] 批次缓存处理失败，回退到全量分析: ${err}`)
+          logger.error(`[报告] 批次缓存处理失败，回退到全量分析: ${err}`)
           useIncrementalAnalysis = false
         }
       }
@@ -975,7 +976,7 @@ export class ReportPlugin extends plugin {
         let messagesToAnalyze = messages
         if (messages.length > maxMessages) {
           messagesToAnalyze = messages.slice(-maxMessages)
-          logger.info(`[群聊洞见-报告] 消息数${messages.length}超过阈值，全量分析最新的${maxMessages}条消息`)
+          logger.info(`[报告] 消息数${messages.length}超过阈值，全量分析最新的${maxMessages}条消息`)
         }
 
         const analysisPromises = []
@@ -986,7 +987,7 @@ export class ReportPlugin extends plugin {
             topicAnalyzer.analyze(messagesToAnalyze, stats)
               .then(result => ({ type: 'topics', data: result.topics, usage: result.usage }))
               .catch(err => {
-                logger.error(`[群聊洞见-报告] 话题分析失败: ${err}`)
+                logger.error(`[报告] 话题分析失败: ${err}`)
                 return { type: 'topics', data: [], usage: null }
               })
           )
@@ -998,7 +999,7 @@ export class ReportPlugin extends plugin {
             goldenQuoteAnalyzer.analyze(messagesToAnalyze, stats)
               .then(result => ({ type: 'goldenQuotes', data: result.goldenQuotes, usage: result.usage }))
               .catch(err => {
-                logger.error(`[群聊洞见-报告] 金句提取失败: ${err}`)
+                logger.error(`[报告] 金句提取失败: ${err}`)
                 return { type: 'goldenQuotes', data: [], usage: null }
               })
           )
@@ -1028,7 +1029,7 @@ export class ReportPlugin extends plugin {
           userTitles = titleResult.userTitles
           titleUsage = titleResult.usage
         } catch (err) {
-          logger.error(`[群聊洞见-报告] 用户称号分析失败: ${err}`)
+          logger.error(`[报告] 用户称号分析失败: ${err}`)
         }
       }
 
@@ -1057,11 +1058,11 @@ export class ReportPlugin extends plugin {
       }
 
       const analysisMode = useIncrementalAnalysis ? '增量' : '全量'
-      logger.info(`[群聊洞见-报告] ${analysisMode}分析完成 - 话题: ${topics.length}, 金句: ${goldenQuotes.length}, 称号: ${userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
+      logger.info(`[报告] ${analysisMode}分析完成 - 话题: ${topics.length}, 金句: ${goldenQuotes.length}, 称号: ${userTitles.length}, Tokens: ${analysisResults.tokenUsage.total_tokens}`)
 
       return analysisResults
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 增强分析失败: ${err}`)
+      logger.error(`[报告] 增强分析失败: ${err}`)
       return null
     }
   }
@@ -1136,7 +1137,7 @@ export class ReportPlugin extends plugin {
 
       return img
     } catch (err) {
-      logger.error(`[群聊洞见-报告] 渲染增强总结失败: ${err}`)
+      logger.error(`[报告] 渲染增强总结失败: ${err}`)
       return null
     }
   }
@@ -1173,7 +1174,7 @@ export class ReportPlugin extends plugin {
       getGoldenQuoteAnalyzer()
     ])
 
-    logger.info(`[群聊洞见-报告] 开始补全 ${batchesToRetry.length} 个批次: [${batchesToRetry.join(', ')}]`)
+    logger.info(`[报告] 开始补全 ${batchesToRetry.length} 个批次: [${batchesToRetry.join(', ')}]`)
 
     // 顺序处理批次，避免 API 过载
     for (const batchIndex of batchesToRetry) {
@@ -1184,12 +1185,12 @@ export class ReportPlugin extends plugin {
         const messagesToAnalyze = messages.slice(contextStart, endIndex)
 
         if (messagesToAnalyze.length === 0) {
-          logger.warn(`[群聊洞见-报告] 批次${batchIndex}消息为空，跳过`)
+          logger.warn(`[报告] 批次${batchIndex}消息为空，跳过`)
           continue
         }
 
         const actualContextCount = startIndex - contextStart
-        logger.info(`[群聊洞见-报告] 补全批次${batchIndex}: 分析 [${contextStart}-${Math.min(messages.length, endIndex)}] 共 ${messagesToAnalyze.length} 条 (含${actualContextCount}条上下文)`)
+        logger.info(`[报告] 补全批次${batchIndex}: 分析 [${contextStart}-${Math.min(messages.length, endIndex)}] 共 ${messagesToAnalyze.length} 条 (含${actualContextCount}条上下文)`)
 
         // 构建轻量级用户映射用于统计
         const userMap = new Map()
@@ -1203,11 +1204,11 @@ export class ReportPlugin extends plugin {
         // 并行分析话题和金句
         const [topicResult, quoteResult] = await Promise.all([
           topicAnalyzer?.analyze(messagesToAnalyze, stats).catch(err => {
-            logger.error(`[群聊洞见-报告] 批次${batchIndex}话题分析失败: ${err}`)
+            logger.error(`[报告] 批次${batchIndex}话题分析失败: ${err}`)
             return { topics: [], usage: null }
           }),
           goldenQuoteAnalyzer?.analyze(messagesToAnalyze, stats).catch(err => {
-            logger.error(`[群聊洞见-报告] 批次${batchIndex}金句分析失败: ${err}`)
+            logger.error(`[报告] 批次${batchIndex}金句分析失败: ${err}`)
             return { goldenQuotes: [], usage: null }
           })
         ])
@@ -1241,10 +1242,10 @@ export class ReportPlugin extends plugin {
         results.tokenUsage.completion_tokens += batchTokenUsage.completion_tokens
         results.tokenUsage.total_tokens += batchTokenUsage.total_tokens
 
-        logger.info(`[群聊洞见-报告] 批次${batchIndex}补全成功 - 话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}`)
+        logger.info(`[报告] 批次${batchIndex}补全成功 - 话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}, Tokens: ${batchTokenUsage.total_tokens}`)
 
       } catch (err) {
-        logger.error(`[群聊洞见-报告] 批次${batchIndex}补全失败: ${err}`)
+        logger.error(`[报告] 批次${batchIndex}补全失败: ${err}`)
 
         // 保存失败标记，防止本次会话重复尝试
         const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${batchIndex}`
@@ -1257,7 +1258,7 @@ export class ReportPlugin extends plugin {
             retried: true
           }), 'EX', 86400)
         } catch (cacheErr) {
-          logger.error(`[群聊洞见-报告] 保存批次${batchIndex}失败标记失败: ${cacheErr}`)
+          logger.error(`[报告] 保存批次${batchIndex}失败标记失败: ${cacheErr}`)
         }
 
         results.stillFailedBatches.push(batchIndex)
@@ -1266,7 +1267,7 @@ export class ReportPlugin extends plugin {
 
     const successCount = results.successBatches.length
     const failCount = results.stillFailedBatches.length
-    logger.info(`[群聊洞见-报告] 批次补全完成 - 成功: ${successCount}, 失败: ${failCount}, 总Token: ${results.tokenUsage.total_tokens}`)
+    logger.info(`[报告] 批次补全完成 - 成功: ${successCount}, 失败: ${failCount}, 总Token: ${results.tokenUsage.total_tokens}`)
 
     return results
   }

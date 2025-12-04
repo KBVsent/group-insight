@@ -3,6 +3,8 @@
  * 使用 OpenAI SDK，兼容所有提供 OpenAI 格式 API 的服务商
  */
 
+import { logger } from '#lib'
+
 export default class AIService {
   constructor(config) {
     this.config = config || {}
@@ -25,7 +27,7 @@ export default class AIService {
     }
 
     if (!this.apiKey) {
-      logger.warn('[群聊洞见] AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
+      logger.warn('AI API Key 未配置，请在 config/config/group-insight.yaml 中配置')
       this.initialized = false
       return false
     }
@@ -41,11 +43,11 @@ export default class AIService {
       })
 
       this.initialized = true
-      logger.debug(`[群聊洞见] AI 服务初始化成功，模型: ${this.model}`)
+      logger.debug(`AI 服务初始化成功，模型: ${this.model}`)
       return true
     } catch (err) {
-      logger.error('[群聊洞见] openai SDK 未安装')
-      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
+      logger.error('openai SDK 未安装')
+      logger.warn('请运行: cd plugins/group-insight && pnpm install')
       this.initialized = false
       return false
     }

@@ -3,6 +3,7 @@
  */
 import plugin from '../../../lib/plugins/plugin.js'
 import { getMessageCollector } from '../components/index.js'
+import { logger } from '#lib'
 
 export class AtMePlugin extends plugin {
   constructor() {
@@ -27,7 +28,7 @@ export class AtMePlugin extends plugin {
   async init() {
     // 初始化共享服务（由 Services 模块统一管理）
     await getMessageCollector()
-    logger.debug('[群聊洞见-谁艾特我] 插件已初始化')
+    logger.debug('[谁艾特我] 插件已初始化')
   }
 
   /**
@@ -81,7 +82,7 @@ export class AtMePlugin extends plugin {
               try {
                 contextMsgContent.push({ type: 'face', id: faceId })
               } catch (err) {
-                logger.debug(`[群聊洞见] 发送上下文表情失败 (face ${faceId}): ${err.message}`)
+                logger.debug(`发送上下文表情失败 (face ${faceId}): ${err.message}`)
               }
             }
           }
@@ -132,7 +133,7 @@ export class AtMePlugin extends plugin {
           try {
             msg.push({ type: 'face', id: faceId })
           } catch (err) {
-            logger.debug(`[群聊洞见] 发送表情失败 (face ${faceId}): ${err.message}`)
+            logger.debug(`发送表情失败 (face ${faceId}): ${err.message}`)
           }
         }
       }
@@ -182,7 +183,7 @@ export class AtMePlugin extends plugin {
               try {
                 nextMsgContent.push({ type: 'face', id: faceId })
               } catch (err) {
-                logger.debug(`[群聊洞见] 发送下一条消息表情失败 (face ${faceId}): ${err.message}`)
+                logger.debug(`发送下一条消息表情失败 (face ${faceId}): ${err.message}`)
               }
             }
           }
@@ -237,7 +238,7 @@ export class AtMePlugin extends plugin {
 
       return this.reply(forwardMsg)
     } catch (err) {
-      logger.error(`[群聊洞见] 发送合并转发消息失败: ${err}`)
+      logger.error(`发送合并转发消息失败: ${err}`)
       return this.reply('发送消息失败，请查看日志', true)
     }
   }

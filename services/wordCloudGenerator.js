@@ -7,6 +7,7 @@ import moment from 'moment'
 import puppeteer from '../../../lib/puppeteer/puppeteer.js'
 import TextProcessor from '../utils/textProcessor.js'
 import { WORDCLOUD_TEMPLATE_PATH, PLUGIN_ROOT } from '#paths'
+import { logger } from '#lib'
 
 export default class WordCloudGenerator {
   constructor(config) {
@@ -40,7 +41,7 @@ export default class WordCloudGenerator {
 
     try {
       // 处理消息并生成词频统计或 TF-IDF 关键词
-      logger.info(`[群聊洞见] 开始生成词云，消息数: ${messages.length}，提取方式: ${extractMethod}`)
+      logger.info(`开始生成词云，消息数: ${messages.length}，提取方式: ${extractMethod}`)
 
       const wordData = await this.textProcessor.processMessages(messages, {
         minLength,
@@ -50,11 +51,11 @@ export default class WordCloudGenerator {
       })
 
       if (wordData.length === 0) {
-        logger.warn('[群聊洞见] 没有足够的词汇生成词云')
+        logger.warn('没有足够的词汇生成词云')
         return null
       }
 
-      logger.info(`[群聊洞见] 统计到 ${wordData.length} 个词汇`)
+      logger.info(`统计到 ${wordData.length} 个词汇`)
 
       // 根据提取方式准备词云数据
       let wordList
@@ -66,7 +67,7 @@ export default class WordCloudGenerator {
           const scaledWeight = 1 + item.weight * 9  // 映射 0-1 到 1-10
           return [item.word, scaledWeight]
         })
-        logger.debug(`[群聊洞见] TF-IDF 权重范围: ${wordData[wordData.length - 1]?.weight?.toFixed(4) || 0} - ${wordData[0]?.weight?.toFixed(4) || 1}`)
+        logger.debug(`TF-IDF 权重范围: ${wordData[wordData.length - 1]?.weight?.toFixed(4) || 0} - ${wordData[0]?.weight?.toFixed(4) || 1}`)
       } else {
         // 词频模式：wordData 格式为 [{word, count}, ...]
         // 使用对数缩放归一化
@@ -75,7 +76,7 @@ export default class WordCloudGenerator {
         const minFreq = Math.min(...frequencies)
         const freqRange = maxFreq - minFreq
 
-        logger.info(`[群聊洞见] 频率范围: ${minFreq} - ${maxFreq}`)
+        logger.info(`频率范围: ${minFreq} - ${maxFreq}`)
 
         wordList = wordData.map(item => {
           let normalizedWeight
@@ -113,10 +114,10 @@ export default class WordCloudGenerator {
         ...templateData
       })
 
-      logger.info('[群聊洞见] 词云生成成功')
+      logger.info('词云生成成功')
       return img
     } catch (err) {
-      logger.error(`[群聊洞见] 词云生成失败: ${err}`)
+      logger.error(`词云生成失败: ${err}`)
       logger.error(err.stack)
       return null
     }

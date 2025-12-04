@@ -5,6 +5,8 @@
  * 核心原理：rkey 是通用的临时访问令牌，任何 fileid 都可以使用未过期的 rkey 访问
  */
 
+import { logger } from '#lib'
+
 export default class ImageRkeyManager {
   constructor(redisPrefix = 'Yz:groupManager') {
     this.redisPrefix = redisPrefix

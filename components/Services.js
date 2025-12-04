@@ -3,6 +3,7 @@
  * 使用 ServiceManager 确保优雅的服务生命周期管理
  */
 import { ServiceManager, SingletonServiceManager } from './ServiceManager.js'
+import { logger } from '#lib'
 import MessageCollector from '../services/messageCollector.js'
 import WordCloudGenerator from '../services/wordCloudGenerator.js'
 import AIService from '../services/aiService.js'
@@ -20,7 +21,7 @@ class MessageCollectorManager extends ServiceManager {
   async _doInitialize() {
     const config = Config.get()
     if (config?.messageCollection?.enabled === false) {
-      logger.debug('[群聊洞见] 消息收集已禁用')
+      logger.debug('消息收集已禁用')
       return null
     }
 
@@ -48,7 +49,7 @@ class AIServiceManager extends ServiceManager {
     // 检查是否启用
     const isAIEnabled = aiConfig && aiConfig.apiKey && aiConfig.apiKey.trim() !== ''
     if (!isAIEnabled) {
-      logger.debug('[群聊洞见] AI 服务未启用 (未配置 API Key)')
+      logger.debug('AI 服务未启用 (未配置 API Key)')
       return null
     }
 
@@ -196,7 +197,7 @@ export async function getTopicAnalyzer() {
   try {
     return await topicAnalyzerManager.getInstance()
   } catch (error) {
-    logger.debug(`[群聊洞见] 话题分析器不可用: ${error.message}`)
+    logger.debug(`话题分析器不可用: ${error.message}`)
     return null
   }
 }
@@ -209,7 +210,7 @@ export async function getGoldenQuoteAnalyzer() {
   try {
     return await goldenQuoteAnalyzerManager.getInstance()
   } catch (error) {
-    logger.debug(`[群聊洞见] 金句分析器不可用: ${error.message}`)
+    logger.debug(`金句分析器不可用: ${error.message}`)
     return null
   }
 }
@@ -222,7 +223,7 @@ export async function getUserTitleAnalyzer() {
   try {
     return await userTitleAnalyzerManager.getInstance()
   } catch (error) {
-    logger.debug(`[群聊洞见] 用户称号分析器不可用: ${error.message}`)
+    logger.debug(`用户称号分析器不可用: ${error.message}`)
     return null
   }
 }
@@ -231,7 +232,7 @@ export async function getUserTitleAnalyzer() {
  * 重新初始化所有服务（配置变更时调用）
  */
 export async function reinitializeServices(newConfig) {
-  logger.debug('[群聊洞见] 正在重新初始化服务...')
+  logger.debug('正在重新初始化服务...')
 
   // 重置所有单例服务（包括分析器）
   await SingletonServiceManager.resetAll()
@@ -241,19 +242,19 @@ export async function reinitializeServices(newConfig) {
     await getMessageCollector()
   }
 
-  logger.debug('[群聊洞见] 服务重新初始化完成')
+  logger.debug('服务重新初始化完成')
 }
 
 /**
  * 停止所有服务
  */
 export async function stopAllServices() {
-  logger.debug('[群聊洞见] 正在停止所有服务...')
+  logger.debug('正在停止所有服务...')
 
   // 停止所有单例服务（包括分析器）
   await SingletonServiceManager.stopAll()
 
-  logger.debug('[群聊洞见] 所有服务已停止')
+  logger.debug('所有服务已停止')
 }
 
 /**

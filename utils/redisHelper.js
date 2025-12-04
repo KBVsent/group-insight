@@ -4,6 +4,7 @@
  */
 
 import moment from 'moment'
+import { logger } from '#lib'
 
 export default class RedisHelper {
   constructor(retentionDays = 7, atRetentionHours = 24) {
@@ -67,7 +68,7 @@ export default class RedisHelper {
       // key 存在但没有过期时间，设置过期时间
       const expireSeconds = this.retentionDays * 24 * 60 * 60
       await redis.expire(key, expireSeconds)
-      logger.debug(`[群聊洞见] 为消息 key 设置过期时间: ${key} (${this.retentionDays} 天)`)
+      logger.debug(`为消息 key 设置过期时间: ${key} (${this.retentionDays} 天)`)
     }
   }
 
@@ -92,7 +93,7 @@ export default class RedisHelper {
         try {
           messages.push(JSON.parse(msg))
         } catch (err) {
-          logger.error(`[群聊洞见] 解析消息失败: ${err}`)
+          logger.error(`解析消息失败: ${err}`)
         }
       }
     }
@@ -121,7 +122,7 @@ export default class RedisHelper {
 
     // 如果已经过期，不保存
     if (expireSeconds <= 0) {
-      logger.debug(`[群聊洞见] 艾特记录已过期，跳过保存: ${recordId}`)
+      logger.debug(`艾特记录已过期，跳过保存: ${recordId}`)
       return null
     }
 
@@ -156,10 +157,10 @@ export default class RedisHelper {
         await redis.expire(indexKey, expireSeconds + 3600)
       }
 
-      logger.debug(`[群聊洞见] 保存艾特记录成功: ${recordId}，过期时间: ${expireTime}`)
+      logger.debug(`保存艾特记录成功: ${recordId}，过期时间: ${expireTime}`)
       return recordId
     } catch (err) {
-      logger.error(`[群聊洞见] 保存艾特记录失败: ${err}`)
+      logger.error(`保存艾特记录失败: ${err}`)
       return null
     }
   }
@@ -216,12 +217,12 @@ export default class RedisHelper {
       // 清理索引中已过期的记录ID
       if (expiredIds.length > 0) {
         await redis.zRem(indexKey, expiredIds)
-        logger.debug(`[群聊洞见] 清理过期索引: ${expiredIds.length} 条`)
+        logger.debug(`清理过期索引: ${expiredIds.length} 条`)
       }
 
       return records.length > 0 ? records : null
     } catch (err) {
-      logger.error(`[群聊洞见] 获取艾特记录失败: ${err}`)
+      logger.error(`获取艾特记录失败: ${err}`)
       return null
     }
   }
@@ -241,7 +242,7 @@ export default class RedisHelper {
       if (recordIds.length === 0) {
         // 删除索引键
         await redis.del(indexKey)
-        logger.debug('[群聊洞见] 清除艾特记录成功: 0 条')
+        logger.debug('清除艾特记录成功: 0 条')
         return 0
       }
 
@@ -257,10 +258,10 @@ export default class RedisHelper {
       // 执行批量删除
       await multi.exec()
 
-      logger.debug(`[群聊洞见] 清除艾特记录成功: ${recordIds.length} 条`)
+      logger.debug(`清除艾特记录成功: ${recordIds.length} 条`)
       return recordIds.length
     } catch (err) {
-      logger.error(`[群聊洞见] 清除艾特记录失败: ${err}`)
+      logger.error(`清除艾特记录失败: ${err}`)
       return 0
     }
   }
@@ -295,10 +296,10 @@ export default class RedisHelper {
       // 执行批量删除
       await multi.exec()
 
-      logger.info(`[群聊洞见] 清除所有艾特记录成功: ${totalDeleted} 条`)
+      logger.info(`清除所有艾特记录成功: ${totalDeleted} 条`)
       return totalDeleted
     } catch (err) {
-      logger.error(`[群聊洞见] 清除所有艾特记录失败: ${err}`)
+      logger.error(`清除所有艾特记录失败: ${err}`)
       return 0
     }
   }
@@ -367,7 +368,7 @@ export default class RedisHelper {
       await redis.expire(key, expireSeconds)
     }
 
-    logger.debug(`[群聊洞见] 保存报告成功: ${key}`)
+    logger.debug(`保存报告成功: ${key}`)
   }
 
   /**
@@ -383,7 +384,7 @@ export default class RedisHelper {
       // 检查 key 是否存在
       const exists = await redis.exists(key)
       if (!exists) {
-        logger.debug(`[群聊洞见] 报告不存在: ${key}`)
+        logger.debug(`报告不存在: ${key}`)
         return null
       }
 
@@ -391,7 +392,7 @@ export default class RedisHelper {
       const data = await redis.hGetAll(key)
 
       if (!data || !data.analysisData) {
-        logger.warn(`[群聊洞见] 报告数据损坏: ${key}`)
+        logger.warn(`报告数据损坏: ${key}`)
         return null
       }
 
@@ -411,7 +412,7 @@ export default class RedisHelper {
         date: data.date || date || moment().format('YYYY-MM-DD')
       }
     } catch (err) {
-      logger.error(`[群聊洞见] 获取报告失败: ${key}, ${err}`)
+      logger.error(`获取报告失败: ${key}, ${err}`)
       return null
     }
   }
@@ -445,9 +446,9 @@ export default class RedisHelper {
         await redis.expire(pendingKey, keyExpireSeconds)
       }
 
-      logger.debug(`[群聊洞见] 保存 pending @ 记录: ${recordId}, 过期时间: ${moment.unix(expireTime).format('YYYY-MM-DD HH:mm:ss')}`)
+      logger.debug(`保存 pending @ 记录: ${recordId}, 过期时间: ${moment.unix(expireTime).format('YYYY-MM-DD HH:mm:ss')}`)
     } catch (err) {
-      logger.error(`[群聊洞见] 保存 pending @ 记录失败: ${err}`)
+      logger.error(`保存 pending @ 记录失败: ${err}`)
     }
   }
 
@@ -469,12 +470,12 @@ export default class RedisHelper {
       // 清理已过期的记录
       const expiredCount = await redis.zRemRangeByScore(pendingKey, '-inf', currentTime - 1)
       if (expiredCount > 0) {
-        logger.debug(`[群聊洞见] 清理过期 pending @ 记录: ${expiredCount} 条`)
+        logger.debug(`清理过期 pending @ 记录: ${expiredCount} 条`)
       }
 
       return recordIds || []
     } catch (err) {
-      logger.error(`[群聊洞见] 获取 pending @ 记录失败: ${err}`)
+      logger.error(`获取 pending @ 记录失败: ${err}`)
       return []
     }
   }
@@ -491,17 +492,17 @@ export default class RedisHelper {
       // 检查记录是否存在
       const exists = await redis.exists(dataKey)
       if (!exists) {
-        logger.debug(`[群聊洞见] @ 记录已过期，跳过更新: ${recordId}`)
+        logger.debug(`@ 记录已过期，跳过更新: ${recordId}`)
         return false
       }
 
       // 更新 nextMessages 字段
       await redis.hSet(dataKey, 'nextMessages', JSON.stringify(nextMessages))
 
-      logger.debug(`[群聊洞见] 更新 @ 记录成功: ${recordId}, 添加 ${nextMessages.length} 条后续消息`)
+      logger.debug(`更新 @ 记录成功: ${recordId}, 添加 ${nextMessages.length} 条后续消息`)
       return true
     } catch (err) {
-      logger.error(`[群聊洞见] 更新 @ 记录失败: ${err}`)
+      logger.error(`更新 @ 记录失败: ${err}`)
       return false
     }
   }
@@ -517,9 +518,9 @@ export default class RedisHelper {
 
     try {
       await redis.zRem(pendingKey, [recordId])
-      logger.debug(`[群聊洞见] 移除 pending @ 记录: ${recordId}`)
+      logger.debug(`移除 pending @ 记录: ${recordId}`)
     } catch (err) {
-      logger.error(`[群聊洞见] 移除 pending @ 记录失败: ${err}`)
+      logger.error(`移除 pending @ 记录失败: ${err}`)
     }
   }
 }

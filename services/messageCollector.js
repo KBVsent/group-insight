@@ -7,6 +7,7 @@
 import RedisHelper from '../utils/redisHelper.js'
 import ImageRkeyManager from '../utils/imageRkeyManager.js'
 import moment from 'moment'
+import { logger } from '#lib'
 
 export default class MessageCollector {
   constructor(config) {
@@ -30,9 +31,9 @@ export default class MessageCollector {
     this.isCollecting = false
     this.handler = null  // 保存处理器引用，用于移除监听器
 
-    logger.debug(`[群聊洞见] 消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 上下文消息: ${this.contextMessageCount}`)
+    logger.debug(`消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 上下文消息: ${this.contextMessageCount}`)
     if (this.whitelist.length > 0) {
-      logger.debug(`[群聊洞见] 定时总结白名单: ${this.whitelist.length} 个群`)
+      logger.debug(`定时总结白名单: ${this.whitelist.length} 个群`)
     }
   }
 
@@ -42,7 +43,7 @@ export default class MessageCollector {
   startCollecting() {
     // 避免重复注册监听器
     if (this.isCollecting) {
-      logger.warn('[群聊洞见] 消息收集器已经在运行，跳过重复注册')
+      logger.warn('消息收集器已经在运行，跳过重复注册')
       return
     }
 
@@ -51,14 +52,14 @@ export default class MessageCollector {
       try {
         await this.handleMessage(e)
       } catch (err) {
-        logger.error(`[群聊洞见] 消息收集失败: ${err}`)
+        logger.error(`消息收集失败: ${err}`)
       }
     }
 
     Bot.on('message.group', this.handler)
     this.isCollecting = true
 
-    logger.debug('[群聊洞见] 消息收集器已启动')
+    logger.debug('消息收集器已启动')
   }
 
   /**
@@ -73,9 +74,9 @@ export default class MessageCollector {
       Bot.off('message.group', this.handler)
       this.handler = null
       this.isCollecting = false
-      logger.debug('[群聊洞见] 消息收集器已停止')
+      logger.debug('消息收集器已停止')
     } catch (err) {
-      logger.error(`[群聊洞见] 停止收集器时发生错误: ${err}`)
+      logger.error(`停止收集器时发生错误: ${err}`)
     }
   }
 
@@ -95,7 +96,7 @@ export default class MessageCollector {
 
     if (allImageUrls.length > 0) {
       this.rkeyManager.updateBatch(allImageUrls).catch(err => {
-        logger.error(`[群聊洞见] 更新 rkey 失败: ${err}`)
+        logger.error(`更新 rkey 失败: ${err}`)
       })
     }
 
@@ -148,7 +149,7 @@ export default class MessageCollector {
           if (emojiCount > 0) {
             faces.emoji.push(emojiCount)
             faces.total += emojiCount
-            logger.debug(`[群聊洞见] 检测到 ${emojiCount} 个 Emoji 表情`)
+            logger.debug(`检测到 ${emojiCount} 个 Emoji 表情`)
           }
         }
       } else if (msg.type === 'at') {
@@ -160,14 +161,14 @@ export default class MessageCollector {
           if (mfaceUrl) {
             faces.mface.push(mfaceUrl)
             faces.total++
-            logger.debug(`[群聊洞见] 收集动画表情: ${msg.summary}`)
+            logger.debug(`收集动画表情: ${msg.summary}`)
           }
         } else if (this.collectImages) {
           // 普通图片
           const imgUrl = msg.url || msg.file
           if (imgUrl) {
             images.push(imgUrl)
-            logger.debug(`[群聊洞见] 收集图片`)
+            logger.debug(`收集图片`)
           }
         }
       } else if (msg.type === 'reply') {
@@ -188,23 +189,23 @@ export default class MessageCollector {
               // 如果需要区分，可以单独统计
               faces.face.push(faceId)
               faces.total++
-              logger.debug(`[群聊洞见] 收集 QQ 动画表情: face ${faceId} (${msg.raw?.faceText || ''})`)
+              logger.debug(`收集 QQ 动画表情: face ${faceId} (${msg.raw?.faceText || ''})`)
             } else {
               // faceType=2 或其他，普通小表情
               faces.face.push(faceId)
               faces.total++
-              logger.debug(`[群聊洞见] 收集 QQ 小表情: face ${faceId} (${msg.raw?.faceText || ''})`)
+              logger.debug(`收集 QQ 小表情: face ${faceId} (${msg.raw?.faceText || ''})`)
             }
           } else {
             // 无法提取，输出调试信息
-            logger.debug(`[群聊洞见] 无法提取 face id，消息段结构: ${JSON.stringify(msg).substring(0, 200)}`)
+            logger.debug(`无法提取 face id，消息段结构: ${JSON.stringify(msg).substring(0, 200)}`)
           }
         }
       }
 
       // 调试：打印所有消息段结构（仅在 DEBUG 模式）
       if (this.collectFaces && process.env.DEBUG_MESSAGE_COLLECTOR) {
-        logger.debug(`[群聊洞见] 消息段: type=${msg.type}, raw=${msg.raw}, summary=${msg.summary}, keys=${Object.keys(msg).join(',')}`)
+        logger.debug(`消息段: type=${msg.type}, raw=${msg.raw}, summary=${msg.summary}, keys=${Object.keys(msg).join(',')}`)
       }
     }
 
@@ -307,7 +308,7 @@ export default class MessageCollector {
         const reply = (await e.group.getChatHistory(e.source.seq, 1)).pop()
         replyMessageId = reply ? reply.message_id : ''
       } catch (err) {
-        logger.debug(`[群聊洞见] 获取回复消息失败: ${err}`)
+        logger.debug(`获取回复消息失败: ${err}`)
       }
     }
 
@@ -323,7 +324,7 @@ export default class MessageCollector {
         this.contextMessageCount,
         e.time  // 只获取当前@消息之前的消息
       )
-      logger.debug(`[群聊洞见] 获取到 ${contextMessages.length} 条上下文消息`)
+      logger.debug(`获取到 ${contextMessages.length} 条上下文消息`)
     }
 
     // 保存艾特记录
@@ -346,7 +347,7 @@ export default class MessageCollector {
         const nextMessageTimeout = this.config.nextMessageTimeout || 300
         const expireTime = e.time + nextMessageTimeout
         await this.redisHelper.savePendingAt(e.group_id, e.user_id.toString(), recordId, expireTime)
-        logger.debug(`[群聊洞见] 纯@消息，等待收集下一条消息，超时时间: ${nextMessageTimeout}秒`)
+        logger.debug(`纯@消息，等待收集下一条消息，超时时间: ${nextMessageTimeout}秒`)
       }
     }
   }
@@ -420,7 +421,7 @@ export default class MessageCollector {
       const userMessages = []
       const targetUserId = parseInt(userId)
 
-      logger.debug(`[群聊洞见] 开始查询用户 ${targetUserId} 在 ${beforeTime} 之前的 ${count} 条消息`)
+      logger.debug(`开始查询用户 ${targetUserId} 在 ${beforeTime} 之前的 ${count} 条消息`)
 
       // 获取最近7天的消息(从retentionDays配置读取)
       const days = this.redisHelper.retentionDays
@@ -434,9 +435,9 @@ export default class MessageCollector {
         try {
           // 获取该日的所有消息
           dayMessages = await redis.lRange(key, 0, -1)
-          logger.debug(`[群聊洞见] 查询日期 ${date}，获取到 ${dayMessages.length} 条消息`)
+          logger.debug(`查询日期 ${date}，获取到 ${dayMessages.length} 条消息`)
         } catch (err) {
-          logger.error(`[群聊洞见] Redis查询失败: ${err}`)
+          logger.error(`Redis查询失败: ${err}`)
           continue
         }
 
@@ -447,11 +448,11 @@ export default class MessageCollector {
 
             // 检查是否是目标用户的消息
             if (msg.user_id === targetUserId) {
-              logger.debug(`[群聊洞见] 找到用户消息: time=${msg.time}, beforeTime=${beforeTime}, message=${msg.message}`)
+              logger.debug(`找到用户消息: time=${msg.time}, beforeTime=${beforeTime}, message=${msg.message}`)
 
               // 如果指定了时间限制,只获取该时间之前的消息
               if (beforeTime && msg.time >= beforeTime) {
-                logger.debug(`[群聊洞见] 消息时间 ${msg.time} >= ${beforeTime}，跳过`)
+                logger.debug(`消息时间 ${msg.time} >= ${beforeTime}，跳过`)
                 continue
               }
 
@@ -462,10 +463,10 @@ export default class MessageCollector {
                 faces: msg.faces || {}
               })
 
-              logger.debug(`[群聊洞见] 已收集 ${userMessages.length}/${count} 条消息`)
+              logger.debug(`已收集 ${userMessages.length}/${count} 条消息`)
             }
           } catch (err) {
-            logger.debug(`[群聊洞见] 解析消息失败: ${err}`)
+            logger.debug(`解析消息失败: ${err}`)
           }
         }
       }
@@ -473,10 +474,10 @@ export default class MessageCollector {
       // 按时间倒序排列(最新的在前)
       userMessages.sort((a, b) => b.time - a.time)
 
-      logger.debug(`[群聊洞见] 最终获取到 ${userMessages.length} 条上下文消息`)
+      logger.debug(`最终获取到 ${userMessages.length} 条上下文消息`)
       return userMessages.slice(0, count)
     } catch (err) {
-      logger.error(`[群聊洞见] 获取用户最近消息失败: ${err}`)
+      logger.error(`获取用户最近消息失败: ${err}`)
       return []
     }
   }
@@ -503,7 +504,7 @@ export default class MessageCollector {
         return
       }
 
-      logger.debug(`[群聊洞见] 发现 ${pendingRecordIds.length} 条待更新的 @ 记录`)
+      logger.debug(`发现 ${pendingRecordIds.length} 条待更新的 @ 记录`)
 
       // 收集当前消息作为"下一条消息"
       const nextMessages = this.collectNextMessages(message, e.time)
@@ -515,11 +516,11 @@ export default class MessageCollector {
         if (success) {
           // 从 pending 列表中移除
           await this.redisHelper.removePendingAt(e.group_id, e.user_id.toString(), recordId)
-          logger.debug(`[群聊洞见] 成功更新 @ 记录的下一条消息: ${recordId}`)
+          logger.debug(`成功更新 @ 记录的下一条消息: ${recordId}`)
         }
       }
     } catch (err) {
-      logger.error(`[群聊洞见] 检查并更新 pending @ 记录失败: ${err}`)
+      logger.error(`检查并更新 pending @ 记录失败: ${err}`)
     }
   }
 
@@ -574,16 +575,16 @@ export default class MessageCollector {
         const exists = await redis.exists(cacheKey)
 
         if (!exists) {
-          logger.info(`[群聊洞见] 群${groupId}达到${messageCount}条消息（批次${batchIndex}），触发部分分析`)
+          logger.info(`群${groupId}达到${messageCount}条消息（批次${batchIndex}），触发部分分析`)
 
           // 异步触发部分分析（不阻塞消息处理）
           this.triggerPartialAnalysis(groupId, batchIndex, today).catch(err => {
-            logger.error(`[群聊洞见] 批次${batchIndex}自动触发分析失败: ${err}`)
+            logger.error(`批次${batchIndex}自动触发分析失败: ${err}`)
           })
         }
       }
     } catch (err) {
-      logger.error(`[群聊洞见] 检查阈值触发失败: ${err}`)
+      logger.error(`检查阈值触发失败: ${err}`)
     }
   }
 
@@ -599,7 +600,7 @@ export default class MessageCollector {
       const count = await redis.lLen(key)
       return count || 0
     } catch (err) {
-      logger.error(`[群聊洞见] 获取消息数量失败: ${err}`)
+      logger.error(`获取消息数量失败: ${err}`)
       return 0
     }
   }
@@ -622,7 +623,7 @@ export default class MessageCollector {
       const startIndex = batchIndex * maxMessages
       const endIndex = (batchIndex + 1) * maxMessages
 
-      logger.info(`[群聊洞见] 批次${batchIndex}: 准备分析消息 [${startIndex}-${endIndex}]`)
+      logger.info(`批次${batchIndex}: 准备分析消息 [${startIndex}-${endIndex}]`)
 
       // 获取所有消息（正序：最早到最新）
       const allMessages = await this.getMessages(groupId, 1)
@@ -635,13 +636,13 @@ export default class MessageCollector {
       const messagesToAnalyze = allMessages.slice(contextStart, endIndex)
 
       if (messagesToAnalyze.length === 0) {
-        logger.warn(`[群聊洞见] 批次${batchIndex}消息为空，跳过分析`)
+        logger.warn(`批次${batchIndex}消息为空，跳过分析`)
         return
       }
 
       const actualStart = contextStart
       const actualEnd = Math.min(allMessages.length, endIndex)
-      logger.info(`[群聊洞见] 批次${batchIndex}开始分析 [${actualStart}-${actualEnd}] 共 ${messagesToAnalyze.length} 条消息（含${startIndex - contextStart}条上下文）`)
+      logger.info(`批次${batchIndex}开始分析 [${actualStart}-${actualEnd}] 共 ${messagesToAnalyze.length} 条消息（含${startIndex - contextStart}条上下文）`)
 
       // 构建轻量级用户映射
       const userMap = new Map()
@@ -697,9 +698,9 @@ export default class MessageCollector {
 
       await redis.set(cacheKey, JSON.stringify(cacheData), 'EX', 86400) // 24小时过期
 
-      logger.info(`[群聊洞见] 批次${batchIndex}分析完成并缓存 [${startIndex}-${endIndex}]，话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}, Tokens: ${tokenUsage.total_tokens}`)
+      logger.info(`批次${batchIndex}分析完成并缓存 [${startIndex}-${endIndex}]，话题: ${cacheData.topics.length}, 金句: ${cacheData.goldenQuotes.length}, Tokens: ${tokenUsage.total_tokens}`)
     } catch (err) {
-      logger.error(`[群聊洞见] 批次${batchIndex}触发分析失败: ${err.stack || err}`)
+      logger.error(`批次${batchIndex}触发分析失败: ${err.stack || err}`)
 
       // 即使失败也记录一个标记，避免重复尝试
       try {
@@ -711,7 +712,7 @@ export default class MessageCollector {
           analyzedAt: Date.now()
         }), 'EX', 86400)
       } catch (cacheErr) {
-        logger.error(`[群聊洞见] 保存失败标记失败: ${cacheErr}`)
+        logger.error(`保存失败标记失败: ${cacheErr}`)
       }
     }
   }

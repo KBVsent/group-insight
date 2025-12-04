@@ -3,6 +3,7 @@
  */
 import plugin from '../../../lib/plugins/plugin.js'
 import { getMessageCollector, getWordCloudGenerator } from '../components/index.js'
+import { logger } from '#lib'
 
 export class WordCloudPlugin extends plugin {
   constructor() {
@@ -69,7 +70,7 @@ export class WordCloudPlugin extends plugin {
         const groupInfo = await e.group.getInfo?.()
         groupName = groupInfo?.group_name || e.group?.name || e.group?.group_name || `群${e.group_id}`
       } catch (err) {
-        logger.debug(`[群聊洞见] 获取群名失败: ${err}，使用群号作为群名`)
+        logger.debug(`获取群名失败: ${err}，使用群号作为群名`)
         groupName = `群${e.group_id}`
       }
 
@@ -86,7 +87,7 @@ export class WordCloudPlugin extends plugin {
 
       return this.reply(img)
     } catch (err) {
-      logger.error(`[群聊洞见] 词云生成错误: ${err}`)
+      logger.error(`词云生成错误: ${err}`)
       return this.reply(`词云生成失败: ${err.message}`, true)
     }
   }

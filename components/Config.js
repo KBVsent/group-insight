@@ -16,7 +16,7 @@ import {
   DEFAULT_CONFIG_PATH,
   CONFIG_TEMPLATE_PATH
 } from '#paths'
-import { errorLogger } from '#lib'
+import { errorLogger, logger } from '#lib'
 
 class Config {
   constructor() {
@@ -280,7 +280,7 @@ class Config {
     if (this.watcher) {
       this.watcher.close()
       this.watcher = null
-      logger.debug('[群聊洞见] 配置监听已停止')
+      logger.debug('配置监听已停止')
     }
   }
 

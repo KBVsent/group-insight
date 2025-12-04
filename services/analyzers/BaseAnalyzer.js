@@ -1,4 +1,5 @@
 import { jsonrepair } from 'jsonrepair'
+import { logger } from '#lib'
 
 /**
  * AI 分析器基类

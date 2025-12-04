@@ -6,6 +6,7 @@
 import fs from 'fs'
 import Config from '../components/Config.js'
 import { STOPWORDS_PATH, USERDICT_PATH } from '#paths'
+import { logger } from '#lib'
 
 export default class TextProcessor {
   constructor() {
@@ -44,10 +45,10 @@ export default class TextProcessor {
       this.loadStopwords()
 
       this.initialized = true
-      logger.debug('[群聊洞见] 文本处理器初始化成功 (jieba-wasm + 词性标注)')
+      logger.debug('文本处理器初始化成功 (jieba-wasm + 词性标注)')
     } catch (err) {
-      logger.error(`[群聊洞见] 文本处理器初始化失败: ${err}`)
-      logger.warn('[群聊洞见] 请运行: cd plugins/group-insight && pnpm install')
+      logger.error(`文本处理器初始化失败: ${err}`)
+      logger.warn('请运行: cd plugins/group-insight && pnpm install')
       this.initialized = false
     }
   }
@@ -58,7 +59,7 @@ export default class TextProcessor {
    */
   loadUserDict() {
     if (!fs.existsSync(USERDICT_PATH)) {
-      logger.debug(`[群聊洞见] 自定义词典文件不存在: ${USERDICT_PATH}`)
+      logger.debug(`自定义词典文件不存在: ${USERDICT_PATH}`)
       return
     }
 
@@ -73,10 +74,10 @@ export default class TextProcessor {
       if (cleanContent) {
         this.jieba.with_dict(cleanContent)
         const wordCount = cleanContent.split('\n').length
-        logger.info(`[群聊洞见] 已加载自定义词典 (${wordCount} 词)`)
+        logger.info(`已加载自定义词典 (${wordCount} 词)`)
       }
     } catch (err) {
-      logger.warn(`[群聊洞见] 加载自定义词典失败: ${err}`)
+      logger.warn(`加载自定义词典失败: ${err}`)
     }
   }
 
@@ -86,7 +87,7 @@ export default class TextProcessor {
    */
   loadStopwords() {
     if (!fs.existsSync(STOPWORDS_PATH)) {
-      logger.debug(`[群聊洞见] 过滤词文件不存在: ${STOPWORDS_PATH}`)
+      logger.debug(`过滤词文件不存在: ${STOPWORDS_PATH}`)
       return
     }
 
@@ -98,9 +99,9 @@ export default class TextProcessor {
         .filter(line => line && !line.startsWith('#'))
 
       this.stopwords = new Set(words)
-      logger.info(`[群聊洞见] 已加载过滤词 (${this.stopwords.size} 词)`)
+      logger.info(`已加载过滤词 (${this.stopwords.size} 词)`)
     } catch (err) {
-      logger.warn(`[群聊洞见] 加载过滤词失败: ${err}`)
+      logger.warn(`加载过滤词失败: ${err}`)
     }
   }
 
@@ -164,7 +165,7 @@ export default class TextProcessor {
   cut(text, minLength = 2) {
     if (!this.initialized || !this.jieba) {
       // 如果未初始化，使用简单的字符分割
-      logger.warn('[群聊洞见] 分词器未初始化，使用简单分词')
+      logger.warn('分词器未初始化，使用简单分词')
       return this.simpleCut(text, minLength)
     }
 
@@ -192,7 +193,7 @@ export default class TextProcessor {
         })
         .map(({ word }) => word) // 仅返回词汇，去除词性标签
     } catch (err) {
-      logger.error(`[群聊洞见] 分词失败: ${err}`)
+      logger.error(`分词失败: ${err}`)
       return this.simpleCut(text, minLength)
     }
   }
@@ -331,7 +332,7 @@ export default class TextProcessor {
     // 步骤2：计算 TF-IDF
     const keywords = this.calculateTFIDF(docsWords, maxWords)
 
-    logger.debug(`[群聊洞见] TF-IDF 提取完成，用户数: ${docsWords.length}，关键词数: ${keywords.length}`)
+    logger.debug(`TF-IDF 提取完成，用户数: ${docsWords.length}，关键词数: ${keywords.length}`)
 
     return keywords
   }

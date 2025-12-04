@@ -4,6 +4,7 @@
  */
 
 import BaseAnalyzer from './BaseAnalyzer.js'
+import { logger } from '#lib'
 
 export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
   constructor(aiService, config = {}) {

@@ -6,7 +6,7 @@
  */
 import chalk from 'chalk'
 import { Config, stopAllServices } from './components/index.js'
-import { loadApps } from './lib/loader/PluginLoader.js'
+import { loadApps, logger } from './lib/index.js'
 
 // 存储加载的插件
 let apps = {}
@@ -20,36 +20,26 @@ try {
   Config.onChange(async (newConfig) => {
     const { reinitializeServices } = await import('./components/index.js')
     await reinitializeServices(newConfig)
-    logger.mark(chalk.blue('[群聊洞见]') + ' 配置变更，所有服务已重新初始化')
+    logger.mark('配置变更，所有服务已重新初始化')
   })
 
-  // 使用增强的加载器加载所有插件
+  // 加载所有插件
   const loadResult = await loadApps()
   apps = loadResult.apps
 
   // 加载结果已由 PluginLoader 输出详细信息，这里输出最终结果
   if (loadResult.loadedCount > 0) {
-    logger.info(
-      chalk.green.bold('[群聊洞见]') +
-      ` 插件初始化完成 (${chalk.cyan(loadResult.loadedCount)} 个模块)`
-    )
+    logger.info(`插件初始化完成 (${chalk.cyan(loadResult.loadedCount)} 个模块)`)
   } else {
-    logger.warn(
-      chalk.yellow('[群聊洞见]') +
-      ' 没有加载任何插件模块'
-    )
+    logger.warn('没有加载任何插件模块')
   }
 } catch (err) {
-  logger.error(
-    chalk.red.bold('[群聊洞见]') +
-    ' 插件初始化失败:',
-    err
-  )
+  logger.error('插件初始化失败:', err)
 }
 
 // 进程退出钩子：确保清理所有监听器和资源
 process.on('exit', () => {
-  logger.info('[群聊洞见] 进程退出，清理资源...')
+  logger.info('进程退出，清理资源...')
   stopAllServices()
   Config.stop()
 })
