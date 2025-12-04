@@ -711,8 +711,8 @@ export class ReportPlugin extends plugin {
 
         logger.info(`[群聊洞见-报告] 主人 ${e.user_id} 强制生成群 ${e.group_id} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
 
-        // 执行分析
-        const analysisResults = await this.performAnalysis(messages, 1, e.group_id, targetDate)
+        // 执行分析（强制重新生成，不使用批次缓存）
+        const analysisResults = await this.performAnalysis(messages, 1, e.group_id, targetDate, { forceRegenerate: true })
 
         if (!analysisResults) {
           return this.reply('分析失败，请查看日志', true)
@@ -763,8 +763,12 @@ export class ReportPlugin extends plugin {
    * @param {number} days - 分析天数
    * @param {string} groupId - 群号（用于增量分析）
    * @param {string} date - 日期（用于增量分析）
+   * @param {Object} options - 额外选项
+   * @param {boolean} options.forceRegenerate - 是否强制重新生成（忽略批次缓存）
    */
-  async performAnalysis(messages, days = 1, groupId = null, date = null) {
+  async performAnalysis(messages, days = 1, groupId = null, date = null, options = {}) {
+    const { forceRegenerate = false } = options
+
     try {
       const config = Config.get()
       const [statisticsService, topicAnalyzer, goldenQuoteAnalyzer, userTitleAnalyzer] = await Promise.all([
@@ -776,7 +780,7 @@ export class ReportPlugin extends plugin {
       const maxMessages = config.ai?.maxMessages || 1000
       const contextOverlap = 50 // 上下文重叠消息数
 
-      logger.info(`[群聊洞见-报告] 开始增强分析 (消息数: ${messages.length})`)
+      logger.info(`[群聊洞见-报告] 开始增强分析 (消息数: ${messages.length}${forceRegenerate ? ', 强制重新生成' : ''})`)
 
       // 1. 基础统计分析
       const stats = statisticsService.analyze(messages)
@@ -821,40 +825,49 @@ export class ReportPlugin extends plugin {
           const failedBatches = []
           const missingBatches = []
 
-          for (let i = 0; i < completedBatches; i++) {
-            const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${i}`
-            const cachedData = await redis.get(cacheKey)
-
-            if (cachedData) {
-              try {
-                const parsed = JSON.parse(cachedData)
-                if (parsed.success) {
-                  batchCaches.push(parsed)
-
-                  // 累加批次的 token 使用情况
-                  if (parsed.tokenUsage) {
-                    batchTokenUsage.prompt_tokens += parsed.tokenUsage.prompt_tokens || 0
-                    batchTokenUsage.completion_tokens += parsed.tokenUsage.completion_tokens || 0
-                    batchTokenUsage.total_tokens += parsed.tokenUsage.total_tokens || 0
-                  }
-
-                  logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}, Tokens: ${parsed.tokenUsage?.total_tokens || 0}`)
-                } else {
-                  // 仅当未重试过时才加入重试列表
-                  if (!parsed.retried) {
-                    failedBatches.push(i)
-                    logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，将尝试重试`)
-                  } else {
-                    logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败且已重试过，跳过此批次`)
-                  }
-                }
-              } catch (err) {
-                logger.error(`[群聊洞见-报告] 批次${i}缓存解析失败: ${err}`)
-                failedBatches.push(i)
-              }
-            } else {
+          // 强制重新生成时，将所有批次都当作缺失批次重新分析
+          if (forceRegenerate) {
+            logger.info(`[群聊洞见-报告] 强制重新生成模式，将重新分析所有 ${completedBatches} 个批次`)
+            for (let i = 0; i < completedBatches; i++) {
               missingBatches.push(i)
-              logger.info(`[群聊洞见-报告] 批次${i}缓存不存在，需要补全`)
+            }
+          } else {
+            // 正常模式：检查缓存状态
+            for (let i = 0; i < completedBatches; i++) {
+              const cacheKey = `Yz:groupManager:batch:${groupId}:${date}:${i}`
+              const cachedData = await redis.get(cacheKey)
+
+              if (cachedData) {
+                try {
+                  const parsed = JSON.parse(cachedData)
+                  if (parsed.success) {
+                    batchCaches.push(parsed)
+
+                    // 累加批次的 token 使用情况
+                    if (parsed.tokenUsage) {
+                      batchTokenUsage.prompt_tokens += parsed.tokenUsage.prompt_tokens || 0
+                      batchTokenUsage.completion_tokens += parsed.tokenUsage.completion_tokens || 0
+                      batchTokenUsage.total_tokens += parsed.tokenUsage.total_tokens || 0
+                    }
+
+                    logger.info(`[群聊洞见-报告] 批次${i}缓存有效 - 话题: ${parsed.topics?.length || 0}, 金句: ${parsed.goldenQuotes?.length || 0}, Tokens: ${parsed.tokenUsage?.total_tokens || 0}`)
+                  } else {
+                    // 仅当未重试过时才加入重试列表
+                    if (!parsed.retried) {
+                      failedBatches.push(i)
+                      logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败，将尝试重试`)
+                    } else {
+                      logger.warn(`[群聊洞见-报告] 批次${i}分析曾失败且已重试过，跳过此批次`)
+                    }
+                  }
+                } catch (err) {
+                  logger.error(`[群聊洞见-报告] 批次${i}缓存解析失败: ${err}`)
+                  failedBatches.push(i)
+                }
+              } else {
+                missingBatches.push(i)
+                logger.info(`[群聊洞见-报告] 批次${i}缓存不存在，需要补全`)
+              }
             }
           }
 
