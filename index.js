@@ -1,8 +1,7 @@
 /**
- * 群聊信息管理插件
+ * 群聊洞见插件
  * 功能：谁艾特我、词云生成、AI总结
  * 作者：vsentkb
- * 版本：2.0.0
  */
 import chalk from 'chalk'
 import { Config, stopAllServices } from './components/index.js'

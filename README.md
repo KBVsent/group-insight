@@ -27,9 +27,12 @@
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 安装
+
+在Yunzai根目录下执行：
 
 ```bash
+git clone --depth=1 https://github.com/KBVsent/group-insight plugins/group-insight
 cd plugins/group-insight
 pnpm install
 ```
@@ -156,7 +159,7 @@ pnpm restart
 
 1. 检查 API Key 是否正确配置
 2. 检查 `baseURL` 是否与服务商匹配
-3. 查看错误日志：`pnpm log`
+3. 查看后台错误日志
 4. 确认 API 额度充足
 
 </details>
@@ -166,7 +169,8 @@ pnpm restart
 
 1. 确认 Redis 运行正常
 2. 检查配置文件存在: `plugins/group-insight/config/config.yaml`
-3. 重启 Yunzai
+3: 确保消息收集配置选项打开（默认为开启）
+4. 重启 Yunzai
 
 </details>
 
@@ -200,29 +204,15 @@ pnpm restart
 ```
 plugins/group-insight/
 ├── apps/              # 命令插件(热重载)
-├── services/          # 业务逻辑服务
 ├── components/        # 核心组件(配置、服务管理)
-├── utils/             # 工具函数
+├── config/            # 配置文件
+├── constants/         # 常量定义
+├── lib/               # 库文件
 ├── resources/         # 模板与资源
-└── config/            # 配置文件
+├── services/          # 业务逻辑服务
+├── utils/             # 工具函数
+├── index.js           # 插件入口
 ```
-
-### 核心特性
-
-- **Singleton 服务管理** - 全局单例,按需初始化,统一配置热重载
-- **配置热重载** - 修改配置无需重启,自动重新初始化所有服务
-- **首次启动自动配置** - 自动复制默认配置,无需手动创建
-- **并行 AI 分析** - 3个分析器并行执行,大幅提升速度
-- **智能重试机制** - AI 请求失败自动重试,网络波动不影响使用
-- **优雅降级** - 部分分析失败不影响整体报告生成
-- **并发控制** - Redis 分布式锁防止同一报告重复生成
-- **历史报告支持** - 支持查询7天内历史日期报告,自动批次补全
-- **高性能优化**:
-  - 统计计算单次遍历 (4x 性能提升)
-  - Redis 批量操作 (50x 性能提升)
-  - 增量 AI 分析 (80% Token 节省)
-- **Redis 存储** - 消息自动过期、@记录精确过期、原子批量操作
-- **资源管理** - 进程退出钩子,自动清理事件监听器和定时任务
 
 </details>
 

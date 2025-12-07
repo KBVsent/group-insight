@@ -71,7 +71,7 @@ groupManager:
       # 是否启用用户称号
       enabled: true
       # 最多分配称号数
-      max_user_titles: 8
+      max_user_titles: 9
       # 获得称号的最少消息数
       min_messages_for_title: 5
 
