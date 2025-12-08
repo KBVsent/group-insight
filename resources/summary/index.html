@@ -47,9 +47,59 @@
       </div>
 
       <!-- 活跃度图表 -->
-      {{if enableActivityChart}}
+      {{if enableActivityChart && activityChart}}
       <div class="section">
-        {{@activityChart}}
+        <div class="activity-chart">
+          <div class="activity-chart-title">
+            <span>📈 24小时活跃度分布</span>
+            <span class="peak-indicator">峰值: {{activityChart.peakHour}}:00-{{activityChart.peakNextHour}}:00 ({{activityChart.peakCount}}条)</span>
+          </div>
+          <div class="activity-chart-container">
+            <div class="activity-bars">
+              {{each activityChart.hours hourData}}
+              <div class="activity-hour {{hourData.isPeak ? 'peak' : ''}}">
+                <div class="activity-bar-container">
+                  <div class="activity-bar activity-{{hourData.activityLevel}}" style="height: {{hourData.heightPercent}}%;">
+                    {{if hourData.count > 0}}
+                    <span class="activity-count">{{hourData.count}}</span>
+                    {{/if}}
+                  </div>
+                </div>
+                <div class="activity-label">{{hourData.hour}}</div>
+              </div>
+              {{/each}}
+            </div>
+          </div>
+          <div class="activity-legend">
+            <div class="legend-item">
+              <span class="legend-color" style="background: #ef4444;"></span>
+              <span>高活跃</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #f59e0b;"></span>
+              <span>中活跃</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #10b981;"></span>
+              <span>低活跃</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #6b7280;"></span>
+              <span>无消息</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {{else enableActivityChart}}
+      <div class="section">
+        <div class="activity-chart">
+          <div class="activity-chart-title">
+            <span>📈 24小时活跃度分布</span>
+          </div>
+          <div class="activity-empty">
+            <p>暂无数据</p>
+          </div>
+        </div>
       </div>
       {{/if}}
 

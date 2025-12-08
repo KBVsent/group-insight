@@ -1076,10 +1076,10 @@ export class ReportPlugin extends plugin {
       const activityVisualizer = await getActivityVisualizer()
       const { stats, topics, goldenQuotes, userTitles } = analysisResults
 
-      // 生成活跃度图表 HTML
-      const activityChart = config?.analysis?.activity?.enabled !== false && activityVisualizer
-        ? activityVisualizer.generateChart(stats.hourly)
-        : ''
+      // 准备活跃度图表数据
+      const activityChartData = config?.analysis?.activity?.enabled !== false && activityVisualizer
+        ? activityVisualizer.prepareChartData(stats.hourly)
+        : null
 
       // 格式化日期范围
       const dateRange = stats.basic.dateRange.start === stats.basic.dateRange.end
@@ -1111,9 +1111,9 @@ export class ReportPlugin extends plugin {
         dateRange,
         peakPeriod: stats.hourly.peakPeriod,
 
-        // 活跃度图表
-        enableActivityChart: config?.analysis?.activity?.enabled !== false,
-        activityChart,
+        // 活跃度图表数据
+        enableActivityChart: config?.analysis?.activity?.enabled !== false && activityChartData !== null,
+        activityChart: activityChartData,
 
         // AI 分析结果
         topics,
