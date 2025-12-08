@@ -1,7 +1,7 @@
 # 群聊信息管理插件配置文件
 
 # 配置文件版本号（请勿手动修改）
-configVersion: 3
+configVersion: 4
 
 groupManager:
   # 消息保留天数
@@ -164,6 +164,11 @@ groupManager:
 
   # 总结功能配置
   summary:
+    # 模板选择（可选值：default 或 scrapbook）
+    # default - 现代科技风格
+    # scrapbook - 手账风格
+    template: 'default'
+    
     # 渲染质量配置
     render:
       # 图片格式：jpeg 或 png（png 无损但文件更大）

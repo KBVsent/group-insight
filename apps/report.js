@@ -14,7 +14,7 @@ import {
   getGoldenQuoteAnalyzer,
   getUserTitleAnalyzer
 } from '../components/index.js'
-import { RESOURCES_DIR, SUMMARY_TEMPLATE_PATH } from '#paths'
+import { RESOURCES_DIR, getSummaryTemplatePath, getSummaryTemplateDir } from '#paths'
 import { logger } from '#lib'
 
 export class ReportPlugin extends plugin {
@@ -1091,6 +1091,11 @@ export class ReportPlugin extends plugin {
       const imgType = renderConfig.imgType || 'png'
       const quality = renderConfig.quality || 100
 
+      // 获取模板配置
+      const templateName = config?.summary?.template || 'default'
+      const templatePath = getSummaryTemplatePath(templateName)
+      const templateDir = getSummaryTemplateDir(templateName)
+
       // 格式化 token 使用情况
       const tokenUsage = options.tokenUsage ? {
         prompt: options.tokenUsage.prompt_tokens || 0,
@@ -1124,12 +1129,14 @@ export class ReportPlugin extends plugin {
         createTime: analysisResults.savedAt ? moment(analysisResults.savedAt).format('YYYY-MM-DD HH:mm:ss') : moment().format('YYYY-MM-DD HH:mm:ss'),
         tokenUsage,
 
-        pluResPath: RESOURCES_DIR + '/'
+        // 路径配置
+        pluResPath: RESOURCES_DIR + '/',
+        templateDir: templateDir + '/'
       }
 
       // 渲染群聊总结报告
       const img = await puppeteer.screenshot('group-insight', {
-        tplFile: SUMMARY_TEMPLATE_PATH,
+        tplFile: templatePath,
         imgType,
         quality,
         ...templateData
