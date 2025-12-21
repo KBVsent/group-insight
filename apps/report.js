@@ -102,7 +102,7 @@ export class ReportPlugin extends plugin {
 
   /**
    * 检查群聊报告生成冷却状态
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {boolean} ignoreCooldown - 是否忽略冷却限制（主人/定时任务使用）
    * @returns {Object} { inCooldown, remainingMinutes, lastGenerated }
    */
@@ -152,7 +152,7 @@ export class ReportPlugin extends plugin {
 
   /**
    * 设置群聊报告生成冷却
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} generatedBy - 生成来源 ('user' | 'scheduled' | 'master')
    * @param {number} messageCount - 消息数量
    */
@@ -178,7 +178,7 @@ export class ReportPlugin extends plugin {
 
   /**
    * 检查报告是否正在生成中（防止并发重复生成）
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期
    * @returns {Promise<boolean>} 是否正在生成
    */
@@ -195,7 +195,7 @@ export class ReportPlugin extends plugin {
 
   /**
    * 设置生成锁（开始生成前调用）
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期
    * @param {number} ttl - 锁超时时间（秒），默认5分钟
    * @returns {Promise<boolean>} 是否成功获取锁
@@ -219,7 +219,7 @@ export class ReportPlugin extends plugin {
 
   /**
    * 释放生成锁（生成完成后调用）
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期
    */
   async releaseGeneratingLock(groupId, date) {
@@ -762,7 +762,7 @@ export class ReportPlugin extends plugin {
    * 执行分析
    * @param {Array} messages - 消息数组
    * @param {number} days - 分析天数
-   * @param {string} groupId - 群号（用于增量分析）
+   * @param {number} groupId - 群号（用于增量分析）
    * @param {string} date - 日期（用于增量分析）
    * @param {Object} options - 额外选项
    * @param {boolean} options.forceRegenerate - 是否强制重新生成（忽略批次缓存）
@@ -1153,7 +1153,7 @@ export class ReportPlugin extends plugin {
    * 分析缺失/失败的批次并保存到缓存
    * 用于报告生成时的批次补全
    * @param {Array} messages - 目标日期的所有消息
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 目标日期 (YYYY-MM-DD)
    * @param {Array} missingBatches - 缺失的批次索引数组
    * @param {Array} failedBatches - 失败的批次索引数组

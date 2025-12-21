@@ -354,7 +354,7 @@ export default class MessageCollector {
 
   /**
    * 获取群消息历史
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {number} days - 天数
    * @param {string|null} targetDate - 目标日期 (YYYY-MM-DD)，不传则为今天
    */
@@ -364,7 +364,7 @@ export default class MessageCollector {
 
   /**
    * 获取艾特记录
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    */
   async getAtRecords(groupId, userId) {
@@ -373,7 +373,7 @@ export default class MessageCollector {
 
   /**
    * 清除艾特记录
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    */
   async clearAtRecords(groupId, userId) {
@@ -389,7 +389,7 @@ export default class MessageCollector {
 
   /**
    * 检查群是否在定时总结白名单中
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    */
   isGroupInWhitelist(groupId) {
     // 白名单为空则不启用定时总结
@@ -398,19 +398,20 @@ export default class MessageCollector {
     }
 
     // 检查群是否在白名单中
-    return this.whitelist.includes(String(groupId))
+    return this.whitelist.includes(groupId)
   }
 
   /**
    * 获取所有白名单群列表
+   * @returns {Array<number>} 白名单群号数组
    */
   getWhitelistGroups() {
-    return this.whitelist.map(id => String(id))
+    return this.whitelist
   }
 
   /**
    * 获取指定用户最近的N条消息
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    * @param {number} count - 消息数量
    * @param {number} beforeTime - 时间戳(秒),只获取该时间点之前的消息
@@ -552,13 +553,13 @@ export default class MessageCollector {
 
   /**
    * 检查是否达到消息阈值，触发部分分析
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    */
   async checkThresholdTrigger(groupId) {
     try {
       // 不在白名单不触发
       const whitelist = this.config?.schedule?.whitelist || []
-      if (whitelist.length > 0 && !whitelist.includes(groupId.toString())) {
+      if (whitelist.length > 0 && !whitelist.includes(groupId)) {
         return
       }
 
@@ -592,7 +593,7 @@ export default class MessageCollector {
 
   /**
    * 获取指定日期的消息数量
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期 (YYYY-MM-DD)
    * @returns {number} 消息数量
    */
@@ -609,7 +610,7 @@ export default class MessageCollector {
 
   /**
    * 触发部分分析（仅话题和金句）
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {number} batchIndex - 批次索引（0-based: 0表示0-1000, 1表示1000-2000）
    * @param {string} date - 日期
    */

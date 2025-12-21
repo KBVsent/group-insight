@@ -15,7 +15,7 @@ export default class RedisHelper {
 
   /**
    * 获取消息历史键名
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期 (YYYY-MM-DD)
    */
   getMessageKey(groupId, date = null) {
@@ -25,7 +25,7 @@ export default class RedisHelper {
 
   /**
    * 获取艾特记录索引键名 (Sorted Set)
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    */
   getAtIndexKey(groupId, userId) {
@@ -42,7 +42,7 @@ export default class RedisHelper {
 
   /**
    * 生成艾特记录ID
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    * @param {number} time - 时间戳(秒)
    */
@@ -52,7 +52,7 @@ export default class RedisHelper {
 
   /**
    * 存储群消息
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {object} messageData - 消息数据
    */
   async saveMessage(groupId, messageData) {
@@ -74,7 +74,7 @@ export default class RedisHelper {
 
   /**
    * 获取群消息历史
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {number} days - 查询天数 (1, 3, 7)
    * @param {string|null} targetDate - 目标日期 (YYYY-MM-DD)，不传则为今天
    */
@@ -105,7 +105,7 @@ export default class RedisHelper {
   /**
    * 保存艾特记录
    * 使用 Sorted Set + Hash 实现精确过期
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 被艾特的用户ID
    * @param {object} atData - 艾特数据
    * @returns {string|null} recordId - 记录ID，保存失败返回 null
@@ -167,7 +167,7 @@ export default class RedisHelper {
 
   /**
    * 获取艾特记录
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    */
   async getAtRecords(groupId, userId) {
@@ -229,7 +229,7 @@ export default class RedisHelper {
 
   /**
    * 清除用户的艾特记录（使用 multi 批量删除）
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 用户ID
    */
   async clearAtRecords(groupId, userId) {
@@ -306,7 +306,7 @@ export default class RedisHelper {
 
   /**
    * 获取消息数量统计
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {number} days - 天数
    */
   async getMessageCount(groupId, days = 1) {
@@ -324,7 +324,7 @@ export default class RedisHelper {
 
   /**
    * 获取报告键名
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期 (YYYY-MM-DD)
    */
   getReportKey(groupId, date = null) {
@@ -334,7 +334,7 @@ export default class RedisHelper {
 
   /**
    * 保存群聊报告
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期 (YYYY-MM-DD)
    * @param {object} reportData - 报告数据
    * @param {number} retentionDays - 保留天数 (0 = 永久)
@@ -373,7 +373,7 @@ export default class RedisHelper {
 
   /**
    * 获取群聊报告
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} date - 日期 (YYYY-MM-DD)
    * @returns {Object|null} 报告对象，不存在返回 null
    */
@@ -419,7 +419,7 @@ export default class RedisHelper {
 
   /**
    * 获取 pending @ 记录键名 (Sorted Set)
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 发送@的用户ID
    */
   getPendingAtKey(groupId, userId) {
@@ -428,7 +428,7 @@ export default class RedisHelper {
 
   /**
    * 保存待更新的 @ 记录
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 发送@的用户ID
    * @param {string} recordId - @ 记录ID
    * @param {number} expireTime - 过期时间戳(秒)
@@ -454,7 +454,7 @@ export default class RedisHelper {
 
   /**
    * 获取待更新的 @ 记录
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 发送@的用户ID
    * @returns {Array<string>} recordId 列表
    */
@@ -509,7 +509,7 @@ export default class RedisHelper {
 
   /**
    * 移除 pending @ 记录
-   * @param {string} groupId - 群号
+   * @param {number} groupId - 群号
    * @param {string} userId - 发送@的用户ID
    * @param {string} recordId - @ 记录ID
    */
