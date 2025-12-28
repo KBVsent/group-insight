@@ -50,13 +50,16 @@ export default class MessageCollector {
     // 保存处理器引用，以便后续移除
     this.handler = async (e) => {
       try {
+        if (e.message_type !== 'group' && !e.group_id) {
+          return
+        }
         await this.handleMessage(e)
       } catch (err) {
         logger.error(`消息收集失败: ${err}`)
       }
     }
 
-    Bot.on('message.group', this.handler)
+    Bot.on('message', this.handler)
     this.isCollecting = true
 
     logger.debug('消息收集器已启动')
@@ -71,7 +74,7 @@ export default class MessageCollector {
     }
 
     try {
-      Bot.off('message.group', this.handler)
+      Bot.off('message', this.handler)
       this.handler = null
       this.isCollecting = false
       logger.debug('消息收集器已停止')
