@@ -94,6 +94,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
       const talkative = user.messageCount > (users[0]?.messageCount || 0) * 0.5
       const longMessages = parseFloat(user.avgLength) > 50
       const activeReplier = parseFloat(user.replyRatio) > 0.3
+      const sharer = parseFloat(user.shareRatio) > 0.1
 
       return {
         user_id: user.user_id,  // 保留 user_id 用于后续获取头像
@@ -104,12 +105,16 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
         replyRatio: `${(parseFloat(user.replyRatio) * 100).toFixed(0)}%`,
         nightRatio: `${(parseFloat(user.nightRatio) * 100).toFixed(0)}%`,
         mostActiveHour: user.mostActiveHour,
+        linkCount: user.linkCount || 0,
+        videoCount: user.videoCount || 0,
+        shareRatio: `${(parseFloat(user.shareRatio) * 100).toFixed(0)}%`,
         tags: [
           nightOwl && '夜猫子',
           emojiLover && '表情包达人',
           talkative && '话痨',
           longMessages && '长文爱好者',
-          activeReplier && '互动积极'
+          activeReplier && '互动积极',
+          sharer && '分享达人'
         ].filter(Boolean)
       }
     })
@@ -129,6 +134,9 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
    - 回复消息率: ${user.replyRatio}
    - 夜间活跃度: ${user.nightRatio}
    - 最活跃时段: ${user.mostActiveHour} 点
+   - 分享链接: ${user.linkCount} 个
+   - 分享视频: ${user.videoCount} 个
+   - 分享率: ${user.shareRatio}
    - 行为标签: ${user.tags.join('、') || '普通用户'}`
       })
       .join('\n\n')

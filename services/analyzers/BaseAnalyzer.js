@@ -175,6 +175,25 @@ export default class BaseAnalyzer {
       // 添加消息内容
       line += msg.message
 
+      // 添加链接分享占位符（小程序、分析卡片等）
+      if (msg.links && msg.links.length > 0) {
+        const linkTexts = msg.links.map(link => {
+          const typeLabel = link.type === 'miniapp' ? '小程序' : '链接'
+          return `[${typeLabel}:${link.source || '分享'}]`
+        })
+        line += ' ' + linkTexts.join(' ')
+      }
+
+      // 添加图片占位符
+      if (msg.images && msg.images.length > 0) {
+        line += ` [图片x${msg.images.length}]`
+      }
+
+      // 添加视频占位符
+      if (msg.videos && msg.videos.length > 0) {
+        line += ` [视频x${msg.videos.length}]`
+      }
+
       formatted.push(line)
       processedCount++
     }

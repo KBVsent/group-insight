@@ -21,6 +21,8 @@ export default class MessageCollector {
     this.maxMessageLength = msgConfig.maxMessageLength || 500
     this.collectImages = msgConfig.collectImages !== undefined ? msgConfig.collectImages : false
     this.collectFaces = msgConfig.collectFaces !== undefined ? msgConfig.collectFaces : false
+    this.collectLinks = msgConfig.collectLinks !== undefined ? msgConfig.collectLinks : true
+    this.collectVideos = msgConfig.collectVideos !== undefined ? msgConfig.collectVideos : true
     this.contextMessageCount = config.contextMessageCount || 1  // 新增: 上下文消息数量
 
     // 定时总结白名单配置
@@ -31,7 +33,7 @@ export default class MessageCollector {
     this.isCollecting = false
     this.handler = null  // 保存处理器引用，用于移除监听器
 
-    logger.debug(`消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 上下文消息: ${this.contextMessageCount}`)
+    logger.debug(`消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 收集链接: ${this.collectLinks}, 收集视频: ${this.collectVideos}, 上下文消息: ${this.contextMessageCount}`)
     if (this.whitelist.length > 0) {
       logger.debug(`定时总结白名单: ${this.whitelist.length} 个群`)
     }
@@ -91,23 +93,26 @@ export default class MessageCollector {
     // 提取消息内容
     const message = this.extractMessage(e)
 
-    // 更新图片和动画表情的 rkey（异步执行，不阻塞消息处理）
-    const allImageUrls = [
+    // 更新图片、动画表情和视频的 rkey（异步执行，不阻塞消息处理）
+    const allMediaUrls = [
       ...message.images,                    // 普通图片
-      ...(message.faces.mface || [])        // 动画表情
+      ...(message.faces.mface || []),       // 动画表情
+      ...message.videos.map(v => v.url).filter(Boolean)  // 视频 URL
     ]
 
-    if (allImageUrls.length > 0) {
-      this.rkeyManager.updateBatch(allImageUrls).catch(err => {
+    if (allMediaUrls.length > 0) {
+      this.rkeyManager.updateBatch(allMediaUrls).catch(err => {
         logger.error(`更新 rkey 失败: ${err}`)
       })
     }
 
     // 保存消息
-    // 只要有文本、表情或图片，就保存消息
+    // 只要有文本、表情、图片、链接或视频，就保存消息
     const hasContent = message.text ||
                       message.faces.total > 0 ||
-                      message.images.length > 0
+                      message.images.length > 0 ||
+                      message.links.length > 0 ||
+                      message.videos.length > 0
 
     if (hasContent) {
       await this.saveMessage(e, message)
@@ -133,6 +138,8 @@ export default class MessageCollector {
     let text = ''
     const atUsers = []
     const images = []
+    const links = []     // 链接分享（JSON卡片）
+    const videos = []    // 视频消息
     const faces = {
       face: [],      // 普通表情（从 raw 字段解析）
       mface: [],     // 动画表情（从 image 的 summary 判断）
@@ -188,8 +195,6 @@ export default class MessageCollector {
 
             if (faceType === 3) {
               // faceType=3 表示动画表情（如"敲敲"）
-              // 注意：这里我们仍然将其记录为 face，因为它没有可用的图片 URL
-              // 如果需要区分，可以单独统计
               faces.face.push(faceId)
               faces.total++
               logger.debug(`收集 QQ 动画表情: face ${faceId} (${msg.raw?.faceText || ''})`)
@@ -202,6 +207,28 @@ export default class MessageCollector {
           } else {
             // 无法提取，输出调试信息
             logger.debug(`无法提取 face id，消息段结构: ${JSON.stringify(msg).substring(0, 200)}`)
+          }
+        }
+      } else if (msg.type === 'json') {
+        // JSON 卡片消息（链接分享、小程序等）
+        if (this.collectLinks) {
+          const linkData = this.parseJsonCard(msg.data)
+          if (linkData) {
+            links.push(linkData)
+            logger.debug(`收集链接分享: ${linkData.type} - ${linkData.title || linkData.prompt}`)
+          }
+        }
+      } else if (msg.type === 'video') {
+        // 视频消息
+        if (this.collectVideos) {
+          const videoUrl = msg.url || msg.file
+          if (videoUrl) {
+            videos.push({
+              url: videoUrl,
+              file: msg.file,
+              name: msg.name || null
+            })
+            logger.debug(`收集视频: ${msg.file}`)
           }
         }
       }
@@ -224,6 +251,8 @@ export default class MessageCollector {
       text,
       atUsers,
       images,
+      links,
+      videos,
       faces,
       hasReply,
       atAll: e.atall || false
@@ -243,6 +272,70 @@ export default class MessageCollector {
 
     const matches = text.match(emojiRegex)
     return matches ? matches.length : 0
+  }
+
+  /**
+   * 解析 JSON 卡片消息
+   * @param {string|object} data - JSON 字符串或对象
+   * @returns {object|null} 解析后的卡片信息
+   */
+  parseJsonCard(data) {
+    try {
+      let jsonStr = data
+      if (typeof data === 'string') {
+        jsonStr = data
+          .replace(/&#44;/g, ',')
+          .replace(/&#91;/g, '[')
+          .replace(/&#93;/g, ']')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+      }
+
+      const json = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr
+      const app = json.app || ''
+
+      if (app === 'com.tencent.tuwen.lua' || json.view === 'news') {
+        const meta = json.meta?.news || {}
+        return {
+          type: 'link',
+          source: meta.tag || 'unknown',        // e.g., "哔哩哔哩"
+          title: meta.title || json.prompt || '',
+          url: meta.jumpUrl || null
+        }
+      }
+
+      if (app === 'com.tencent.miniapp_01') {
+        const detail = json.meta?.detail_1 || {}
+        return {
+          type: 'miniapp',
+          source: detail.title || 'unknown',    // e.g., "哔哩哔哩"
+          title: detail.desc || json.prompt || '',
+          url: detail.qqdocurl || detail.url || null
+        }
+      }
+
+      if (app === 'com.tencent.structmsg' && json.view === 'music') {
+        const meta = json.meta?.music || {}
+        return {
+          type: 'music',
+          source: meta.tag || 'unknown',
+          title: meta.title || json.prompt || '',
+          url: meta.jumpUrl || meta.musicUrl || null
+        }
+      }
+
+      return {
+        type: 'json_other',
+        source: app || 'unknown',
+        title: json.prompt || '',
+        url: null
+      }
+    } catch (err) {
+      logger.debug(`解析 JSON 卡片失败: ${err.message}`)
+      return null
+    }
   }
 
   /**
@@ -281,6 +374,16 @@ export default class MessageCollector {
         emoji: message.faces.emoji,    // Emoji 数量数组
         total: message.faces.total     // 总表情数
       }
+    }
+
+    // 保存链接分享数据
+    if (message.links && message.links.length > 0) {
+      messageData.links = message.links
+    }
+
+    // 保存视频数据
+    if (message.videos && message.videos.length > 0) {
+      messageData.videos = message.videos
     }
 
     await this.redisHelper.saveMessage(e.group_id, messageData)
@@ -338,6 +441,8 @@ export default class MessageCollector {
         message: message.text,
         images: message.images,
         faces: message.faces,
+        links: message.links,
+        videos: message.videos,
         time: e.time,
         messageId: replyMessageId,
         contextMessages: contextMessages  // 新增: 上下文消息
@@ -466,7 +571,9 @@ export default class MessageCollector {
                 message: msg.message,
                 time: msg.time,
                 images: msg.images || [],
-                faces: msg.faces || {}
+                faces: msg.faces || {},
+                links: msg.links || [],
+                videos: msg.videos || []
               })
 
               logger.debug(`已收集 ${userMessages.length}/${count} 条消息`)
@@ -546,7 +653,9 @@ export default class MessageCollector {
         message: message.text || '',
         time: time,
         images: message.images || [],
-        faces: message.faces || {}
+        faces: message.faces || {},
+        links: message.links || [],
+        videos: message.videos || []
       })
       break // 当前消息只有一条，所以直接 break
     }

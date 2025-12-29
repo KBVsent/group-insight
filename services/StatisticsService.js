@@ -30,6 +30,12 @@ export default class StatisticsService {
       emoji: 0,
       total: 0
     }
+    // 链接和视频统计
+    const linkStats = {
+      total: 0,
+      bySource: new Map()  // source -> count
+    }
+    let totalVideos = 0
 
     let totalChars = 0
     let totalEmojis = 0
@@ -61,6 +67,20 @@ export default class StatisticsService {
         emojiStats.total += msg.faces.total
       }
 
+      // 链接分享统计（小程序、分享卡片等）
+      if (msg.links && msg.links.length > 0) {
+        linkStats.total += msg.links.length
+        for (const link of msg.links) {
+          const source = link.source || '未知来源'
+          linkStats.bySource.set(source, (linkStats.bySource.get(source) || 0) + 1)
+        }
+      }
+
+      // 视频统计
+      if (msg.videos && msg.videos.length > 0) {
+        totalVideos += msg.videos.length
+      }
+
       // 小时分布统计
       hourlyCount[hour]++
 
@@ -74,6 +94,8 @@ export default class StatisticsService {
           emojiCount: 0,
           replyCount: 0,
           nightCount: 0,
+          linkCount: 0,
+          videoCount: 0,
           hourlyDistribution: new Array(24).fill(0)
         })
       }
@@ -91,6 +113,16 @@ export default class StatisticsService {
       // 用户回复统计
       if (msg.hasReply) {
         userStat.replyCount++
+      }
+
+      // 用户链接分享统计
+      if (msg.links && msg.links.length > 0) {
+        userStat.linkCount += msg.links.length
+      }
+
+      // 用户视频统计
+      if (msg.videos && msg.videos.length > 0) {
+        userStat.videoCount += msg.videos.length
       }
 
       // 用户夜间活跃度
@@ -131,6 +163,10 @@ export default class StatisticsService {
       userStat.nightRatio = userStat.messageCount > 0
         ? (userStat.nightCount / userStat.messageCount).toFixed(2)
         : 0
+      const totalShares = (userStat.linkCount || 0) + (userStat.videoCount || 0)
+      userStat.shareRatio = userStat.messageCount > 0
+        ? (totalShares / userStat.messageCount).toFixed(2)
+        : 0
       userStat.mostActiveHour = this.findPeakHour(userStat.hourlyDistribution)
       userStats.push(userStat)
     }
@@ -154,11 +190,19 @@ export default class StatisticsService {
       peakPeriod: this.getHourRange(peakHour)
     }
 
+    // 转换链接统计的 Map 为对象
+    const linkStatsOutput = {
+      total: linkStats.total,
+      bySource: Object.fromEntries(linkStats.bySource)
+    }
+
     return {
       basic: basicStats,
       users: userStats,
       hourly: hourlyStats,
       emoji: emojiStats,
+      links: linkStatsOutput,
+      videos: totalVideos,
       topUsers: this.rankUsers(userStats)
     }
   }
@@ -243,25 +287,12 @@ export default class StatisticsService {
         animated: 0,
         total: 0
       },
+      links: {
+        total: 0,
+        bySource: {}
+      },
+      videos: 0,
       topUsers: []
-    }
-  }
-
-  /**
-   * 格式化用户统计为可读文本
-   * @param {Object} userStat - 用户统计对象
-   */
-  formatUserStat(userStat) {
-    return {
-      昵称: userStat.nickname,
-      消息数: userStat.messageCount,
-      字数: userStat.charCount,
-      平均长度: userStat.avgLength,
-      表情数: userStat.emojiCount,
-      表情率: `${(parseFloat(userStat.emojiRatio) * 100).toFixed(0)}%`,
-      回复率: `${(parseFloat(userStat.replyRatio) * 100).toFixed(0)}%`,
-      夜猫子率: `${(parseFloat(userStat.nightRatio) * 100).toFixed(0)}%`,
-      最活跃时段: this.getHourRange(userStat.mostActiveHour)
     }
   }
 }

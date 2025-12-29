@@ -70,15 +70,15 @@ body {
 /* 基础统计卡片 */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px;
   margin-bottom: 25px;
 }
 
 .stat-card {
   background: #667eea;
   color: white;
-  padding: 15px;
+  padding: 12px 8px;
   border-radius: 12px;
   text-align: center;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
@@ -91,13 +91,14 @@ body {
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.9;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  white-space: nowrap;
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: bold;
 }
 

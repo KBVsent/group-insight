@@ -113,6 +113,40 @@ export class AtMePlugin extends plugin {
             }
           }
 
+          // 添加上下文消息的链接分享
+          if (ctxMsg.links && ctxMsg.links.length > 0) {
+            for (const link of ctxMsg.links) {
+              const linkText = this.formatLinkText(link)
+              contextMsgContent.push(linkText)
+            }
+          }
+
+          // 添加上下文消息的视频
+          if (ctxMsg.videos && ctxMsg.videos.length > 0) {
+            const videoUrls = ctxMsg.videos.map(v => v.url).filter(Boolean)
+            const refreshedUrls = await rkeyManager.refreshBatch(videoUrls)
+            if (refreshedUrls.length > 0) {
+              for (let i = 0; i < ctxMsg.videos.length; i++) {
+                const refreshedUrl = refreshedUrls[i]
+                if (refreshedUrl) {
+                  contextMsgContent.push(segment.video(refreshedUrl))
+                } else {
+                  contextMsgContent.push(`[视频: ${ctxMsg.videos[i].file || '未知'}]`)
+                }
+              }
+            } else {
+              // rkey 过期，添加占位符
+              for (const video of ctxMsg.videos) {
+                contextMsgContent.push(`[视频: ${video.file || video.name || '未知'}]`)
+              }
+            }
+          }
+
+          // 如果内容只有标注，跳过此消息
+          if (contextMsgContent.length === 1 && contextMsgContent[0] === '💬 [前文]: ') {
+            continue
+          }
+
           msgList.push({
             message: contextMsgContent,
             user_id: record.user_id,
@@ -171,6 +205,35 @@ export class AtMePlugin extends plugin {
         } else {
           // rkey 过期，添加占位符
           msg.push(`[动画表情x${record.faces.mface.length}]`)
+        }
+      }
+
+      // 添加链接分享
+      if (record.links && record.links.length > 0) {
+        for (const link of record.links) {
+          const linkText = this.formatLinkText(link)
+          msg.push(linkText)
+        }
+      }
+
+      // 添加视频（刷新 rkey）
+      if (record.videos && record.videos.length > 0) {
+        const videoUrls = record.videos.map(v => v.url).filter(Boolean)
+        const refreshedUrls = await rkeyManager.refreshBatch(videoUrls)
+        if (refreshedUrls.length > 0) {
+          for (let i = 0; i < record.videos.length; i++) {
+            const refreshedUrl = refreshedUrls[i]
+            if (refreshedUrl) {
+              msg.push(segment.video(refreshedUrl))
+            } else {
+              msg.push(`[视频: ${record.videos[i].file || '未知'}]`)
+            }
+          }
+        } else {
+          // rkey 过期，添加占位符
+          for (const video of record.videos) {
+            msg.push(`[视频: ${video.file || video.name || '未知'}]`)
+          }
         }
       }
 
@@ -234,6 +297,40 @@ export class AtMePlugin extends plugin {
             }
           }
 
+          // 添加下一条消息的链接分享
+          if (nextMsg.links && nextMsg.links.length > 0) {
+            for (const link of nextMsg.links) {
+              const linkText = this.formatLinkText(link)
+              nextMsgContent.push(linkText)
+            }
+          }
+
+          // 添加下一条消息的视频（刷新 rkey）
+          if (nextMsg.videos && nextMsg.videos.length > 0) {
+            const videoUrls = nextMsg.videos.map(v => v.url).filter(Boolean)
+            const refreshedUrls = await rkeyManager.refreshBatch(videoUrls)
+            if (refreshedUrls.length > 0) {
+              for (let i = 0; i < nextMsg.videos.length; i++) {
+                const refreshedUrl = refreshedUrls[i]
+                if (refreshedUrl) {
+                  nextMsgContent.push(segment.video(refreshedUrl))
+                } else {
+                  nextMsgContent.push(`[视频: ${nextMsg.videos[i].file || '未知'}]`)
+                }
+              }
+            } else {
+              // rkey 过期，添加占位符
+              for (const video of nextMsg.videos) {
+                nextMsgContent.push(`[视频: ${video.file || video.name || '未知'}]`)
+              }
+            }
+          }
+
+          // 如果内容只有标注，跳过此消息
+          if (nextMsgContent.length === 1 && nextMsgContent[0] === '💬 [后文]: ') {
+            continue
+          }
+
           msgList.push({
             message: nextMsgContent,
             user_id: record.user_id,
@@ -258,5 +355,33 @@ export class AtMePlugin extends plugin {
       logger.error(`发送合并转发消息失败: ${err}`)
       return this.reply('发送消息失败，请查看日志', true)
     }
+  }
+
+  /**
+   * 格式化链接分享信息为文本
+   * @param {object} link - 链接数据
+   * @returns {string} 格式化后的文本
+   */
+  formatLinkText(link) {
+    if (!link) return '[链接]'
+
+    const typeLabels = {
+      link: '🔗',
+      miniapp: '📱',
+      music: '🎵',
+      json_other: '📄'
+    }
+
+    const icon = typeLabels[link.type] || '🔗'
+    const source = link.source || '未知来源'
+    const title = link.title || '未知内容'
+    const url = link.url || ''
+
+    let result = `${icon}[${source}] ${title}`
+    if (url) {
+      result += `\n🔗 ${url}`
+    }
+
+    return result
   }
 }

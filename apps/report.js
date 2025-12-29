@@ -1116,6 +1116,11 @@ export class ReportPlugin extends plugin {
         dateRange,
         peakPeriod: stats.hourly.peakPeriod,
 
+        // 链接和视频统计
+        totalLinks: stats.links?.total || 0,
+        linksBySource: stats.links?.bySource || {},
+        totalVideos: stats.videos || 0,
+
         // 活跃度图表数据
         enableActivityChart: config?.analysis?.activity?.enabled !== false && activityChartData !== null,
         activityChart: activityChartData,
