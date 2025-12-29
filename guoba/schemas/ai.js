@@ -8,7 +8,6 @@ export default [
     label: "API Key",
     helpMessage: "支持所有兼容 OpenAI API 格式的服务商",
     component: "Input",
-    required: true,
     componentProps: {
       type: "password",
       placeholder: "请输入 API Key"
@@ -19,7 +18,6 @@ export default [
     label: "模型名称",
     helpMessage: "AI 模型的名称",
     component: "Input",
-    required: true,
     componentProps: {
       placeholder: "例如: gpt-5.2, claude-4-5-sonnet"
     }

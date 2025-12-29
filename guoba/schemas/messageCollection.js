@@ -22,6 +22,18 @@ export default [
     component: "Switch"
   },
   {
+    field: "groupManager.messageCollection.collectLinks",
+    label: "收集链接分享",
+    helpMessage: "是否收集群聊中的链接分享（小程序、分析卡片等）",
+    component: "Switch"
+  },
+  {
+    field: "groupManager.messageCollection.collectVideos",
+    label: "收集视频",
+    helpMessage: "是否收集群聊中的视频消息",
+    component: "Switch"
+  },
+  {
     field: "groupManager.messageCollection.maxMessageLength",
     label: "最大消息长度",
     helpMessage: "消息超过此长度将被截断",
