@@ -1,8 +1,6 @@
 /**
  * 图片 rkey 管理器
  * 用于维护图片 URL 中的 rkey 参数，避免链接过期导致发送失败
- *
- * 核心原理：rkey 是通用的临时访问令牌，任何 fileid 都可以使用未过期的 rkey 访问
  */
 
 import { logger } from '#lib'
@@ -168,18 +166,23 @@ export default class ImageRkeyManager {
   /**
    * 批量刷新多个图片 URL（优化版：只查询一次 Redis）
    * @param {string[]} urls - 需要刷新的旧 URL 数组
+   * @param {object} options - 配置选项
+   * @param {boolean} options.skipOnNoRkey - 当无 rkey 时是否返回空数组（默认 true）
    * @returns {Promise<string[]>} 刷新后的 URL 数组
    */
-  async refreshBatch(urls) {
+  async refreshBatch(urls, options = {}) {
     if (!Array.isArray(urls) || urls.length === 0) return urls
+
+    const { skipOnNoRkey = true } = options
 
     try {
       // 优化：只查询一次 Redis，而不是每个 URL 都查询一次
       const latestRkey = await redis.get(this.latestRkeyKey)
 
       if (!latestRkey) {
-        logger.warn(`[ImageRkeyManager] 未找到最新的通用 rkey，返回原 URL`)
-        return urls
+        logger.warn(`[ImageRkeyManager] 未找到最新的通用 rkey`)
+        // 当无 rkey 时，返回空数组以跳过图片
+        return skipOnNoRkey ? [] : urls
       }
 
       // 批量处理所有 URL

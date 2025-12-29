@@ -90,16 +90,26 @@ export class AtMePlugin extends plugin {
           // 添加上下文消息的图片
           if (ctxMsg.images && ctxMsg.images.length > 0) {
             const refreshedUrls = await rkeyManager.refreshBatch(ctxMsg.images)
-            for (const imgUrl of refreshedUrls) {
-              contextMsgContent.push(segment.image(imgUrl))
+            if (refreshedUrls.length > 0) {
+              for (const imgUrl of refreshedUrls) {
+                contextMsgContent.push(segment.image(imgUrl))
+              }
+            } else {
+              // rkey 过期，添加占位符
+              contextMsgContent.push(`[图片x${ctxMsg.images.length}]`)
             }
           }
 
           // 添加上下文消息的动画表情
           if (ctxMsg.faces && ctxMsg.faces.mface && ctxMsg.faces.mface.length > 0) {
             const refreshedMfaces = await rkeyManager.refreshBatch(ctxMsg.faces.mface)
-            for (const mfaceUrl of refreshedMfaces) {
-              contextMsgContent.push(segment.image(mfaceUrl))
+            if (refreshedMfaces.length > 0) {
+              for (const mfaceUrl of refreshedMfaces) {
+                contextMsgContent.push(segment.image(mfaceUrl))
+              }
+            } else {
+              // rkey 过期，添加占位符
+              contextMsgContent.push(`[动画表情x${ctxMsg.faces.mface.length}]`)
             }
           }
 
@@ -141,16 +151,26 @@ export class AtMePlugin extends plugin {
       // 添加图片（刷新 rkey）
       if (record.images && record.images.length > 0) {
         const refreshedUrls = await rkeyManager.refreshBatch(record.images)
-        for (const imgUrl of refreshedUrls) {
-          msg.push(segment.image(imgUrl))
+        if (refreshedUrls.length > 0) {
+          for (const imgUrl of refreshedUrls) {
+            msg.push(segment.image(imgUrl))
+          }
+        } else {
+          // rkey 过期，添加占位符
+          msg.push(`[图片x${record.images.length}]`)
         }
       }
 
       // 添加动画表情（刷新 rkey）
       if (record.faces && record.faces.mface && record.faces.mface.length > 0) {
         const refreshedMfaces = await rkeyManager.refreshBatch(record.faces.mface)
-        for (const mfaceUrl of refreshedMfaces) {
-          msg.push(segment.image(mfaceUrl))
+        if (refreshedMfaces.length > 0) {
+          for (const mfaceUrl of refreshedMfaces) {
+            msg.push(segment.image(mfaceUrl))
+          }
+        } else {
+          // rkey 过期，添加占位符
+          msg.push(`[动画表情x${record.faces.mface.length}]`)
         }
       }
 
@@ -191,16 +211,26 @@ export class AtMePlugin extends plugin {
           // 添加下一条消息的图片
           if (nextMsg.images && nextMsg.images.length > 0) {
             const refreshedUrls = await rkeyManager.refreshBatch(nextMsg.images)
-            for (const imgUrl of refreshedUrls) {
-              nextMsgContent.push(segment.image(imgUrl))
+            if (refreshedUrls.length > 0) {
+              for (const imgUrl of refreshedUrls) {
+                nextMsgContent.push(segment.image(imgUrl))
+              }
+            } else {
+              // rkey 过期，添加占位符
+              nextMsgContent.push(`[图片x${nextMsg.images.length}]`)
             }
           }
 
           // 添加下一条消息的动画表情
           if (nextMsg.faces && nextMsg.faces.mface && nextMsg.faces.mface.length > 0) {
             const refreshedMfaces = await rkeyManager.refreshBatch(nextMsg.faces.mface)
-            for (const mfaceUrl of refreshedMfaces) {
-              nextMsgContent.push(segment.image(mfaceUrl))
+            if (refreshedMfaces.length > 0) {
+              for (const mfaceUrl of refreshedMfaces) {
+                nextMsgContent.push(segment.image(mfaceUrl))
+              }
+            } else {
+              // rkey 过期，添加占位符
+              nextMsgContent.push(`[动画表情x${nextMsg.faces.mface.length}]`)
             }
           }
 
@@ -221,19 +251,6 @@ export class AtMePlugin extends plugin {
         forwardMsg = await e.group.makeForwardMsg(msgList)
       } else {
         forwardMsg = await Bot.makeForwardMsg(msgList)
-      }
-
-      // 处理合并转发的标题
-      if (typeof forwardMsg.data === 'object') {
-        const detail = forwardMsg.data?.meta?.detail
-        if (detail) {
-          detail.news = [{ text: '点击查看谁艾特了你' }]
-        }
-      } else if (typeof forwardMsg.data === 'string') {
-        forwardMsg.data = forwardMsg.data.replace(
-          /<title color="#777777" size="26">.*?<\/title>/,
-          '<title color="#777777" size="26">点击查看谁艾特了你</title>'
-        )
       }
 
       return this.reply(forwardMsg)
