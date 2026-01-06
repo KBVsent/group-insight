@@ -332,8 +332,7 @@ export class ReportPlugin extends plugin {
             // 获取群名
             let groupName = `群${groupId}`
             try {
-              const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
-              const group = bot.pickGroup?.(groupId)
+              const group = Bot.pickGroup?.(groupId)
               if (group) {
                 const groupInfo = await group.getInfo?.()
                 groupName = groupInfo?.group_name || groupInfo?.name || groupName
@@ -466,16 +465,20 @@ export class ReportPlugin extends plugin {
         return { success: false, error: 'report_not_found' }
       }
 
+      // 使用 Bot.pickGroup 自动选择正确的适配器
+      // 这个方法会遍历所有 Bot 找到包含该群的 Bot
+      const group = Bot.pickGroup?.(groupId)
+      if (!group) {
+        logger.error(`[报告发送] 无法获取群 ${groupId} 对象（可能没有 Bot 在该群）`)
+        return { success: false, error: 'group_not_found' }
+      }
+
       // 获取群名
       let groupName = options.groupName || `群${groupId}`
       if (!options.groupName) {
         try {
-          const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
-          const group = bot.pickGroup?.(groupId)
-          if (group) {
-            const groupInfo = await group.getInfo?.()
-            groupName = groupInfo?.group_name || groupInfo?.name || groupName
-          }
+          const groupInfo = await group.getInfo?.()
+          groupName = groupInfo?.group_name || groupInfo?.name || groupName
         } catch (err) {
           logger.debug(`[报告发送] 获取群 ${groupId} 名称失败，使用默认名称`)
         }
@@ -496,16 +499,9 @@ export class ReportPlugin extends plugin {
 
       // 发送到群
       try {
-        const bot = Bot.bots?.[Bot.uin?.[0]] || Bot
-        const group = bot.pickGroup?.(groupId)
-        if (group) {
-          await group.sendMsg(img)
-          logger.info(`[报告发送] 成功发送报告到群 ${groupId} (${groupName})`)
-          return { success: true }
-        } else {
-          logger.error(`[报告发送] 无法获取群 ${groupId} 对象`)
-          return { success: false, error: 'group_not_found' }
-        }
+        await group.sendMsg(img)
+        logger.info(`[报告发送] 成功发送报告到群 ${groupId} (${groupName})`)
+        return { success: true }
       } catch (err) {
         logger.error(`[报告发送] 发送到群 ${groupId} 失败: ${err}`)
         return { success: false, error: err.message }
