@@ -39,6 +39,8 @@ pnpm install
 
 ### 2. 配置 AI 服务
 
+> 推荐使用[Guoba](https://github.com/guoba-yunzai/guoba-plugin)进行可视化配置管理
+
 首次启动时，插件会自动在 `config/` 目录下创建 `config.yaml` 配置文件。
 
 编辑 `plugins/group-insight/config/config.yaml`：

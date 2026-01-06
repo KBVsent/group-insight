@@ -1,7 +1,7 @@
 # 群聊信息管理插件配置文件
 
 # 配置文件版本号（请勿手动修改）
-configVersion: 5
+configVersion: 6
 
 groupManager:
   # 消息保留天数
@@ -165,8 +165,22 @@ groupManager:
     # 主人和定时任务不受此限制
     cooldownMinutes: 60
 
-    # 注意：定时任务已修改为每天23:59执行 (cron: '59 23 * * *')
-    # 如需修改执行时间，请直接编辑 apps/report.js 中的 this.task.cron
+    # 注意：定时总结任务固定在每天23:59执行 (cron: '59 23 * * *')
+
+    # 报告发送配置
+    send:
+      # 发送模式：
+      # - 'disabled': 不自动发送（仅生成保存，需手动查询）
+      # - 'immediate': 总结完成后立即发送到群
+      # - 'scheduled': 在指定时间发送（发送前一天的报告）
+      mode: 'disabled'
+
+      # 定时发送时间（仅 mode: 'scheduled' 时生效）
+      # sendHour: 小时 (0-23)
+      # sendMinute: 分钟 (0-59)
+      # 例如：sendHour: 8, sendMinute: 30 表示次日 8:30 发送前一天的报告
+      sendHour: 8
+      sendMinute: 0
 
   # 总结功能配置
   summary:

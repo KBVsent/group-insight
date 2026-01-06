@@ -20,6 +20,44 @@ export default [
     }
   },
   {
+    field: "groupManager.schedule.send.mode",
+    label: "发送模式",
+    helpMessage: "定时报告生成后的发送方式",
+    bottomHelpMessage: "只针对上方白名单群生效",
+    component: "RadioGroup",
+    componentProps: {
+      options: [
+        { label: "仅生成报告（不发送）", value: "disabled" },
+        { label: "立即发送", value: "immediate" },
+        { label: "定时发送", value: "scheduled" }
+      ]
+    }
+  },
+  {
+    field: "groupManager.schedule.send.sendHour",
+    label: "发送时间（小时）",
+    helpMessage: "发送模式为「定时发送」时生效",
+    bottomHelpMessage: "当发送模式为 定时发送 时生效，表示次日几点发送前一天的报告",
+    component: "InputNumber",
+    componentProps: {
+      min: 0,
+      max: 23,
+      placeholder: "0-23"
+    }
+  },
+  {
+    field: "groupManager.schedule.send.sendMinute",
+    label: "发送时间（分钟）",
+    helpMessage: "发送模式为「定时发送」时生效",
+    bottomHelpMessage: "当发送模式为 定时发送 时生效，与小时配合使用",
+    component: "InputNumber",
+    componentProps: {
+      min: 0,
+      max: 59,
+      placeholder: "0-59"
+    }
+  },
+  {
     field: "groupManager.schedule.minMessages",
     label: "最小消息数阈值",
     helpMessage: "消息少于此数量时跳过总结",
