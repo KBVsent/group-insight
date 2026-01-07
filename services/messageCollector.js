@@ -90,6 +90,12 @@ export default class MessageCollector {
    * @param {object} e - 事件对象
    */
   async handleMessage(e) {
+    // 过滤 QQ 官方 Bot 的消息
+    if (e.bot?.adapter?.id === 'QQBot') {
+      logger.debug(`已过滤QQ官方Bot消息 (adapter: QQBot)`)
+      return
+    }
+    
     // 提取消息内容
     const message = this.extractMessage(e)
 
