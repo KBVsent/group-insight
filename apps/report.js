@@ -458,12 +458,21 @@ export class ReportPlugin extends plugin {
       let report = options.report
       if (!report) {
         report = await messageCollector.redisHelper.getReport(groupId, date)
+        logger.debug(`[报告发送] 从 Redis 获取群 ${groupId} 的报告数据`)
       }
 
       if (!report) {
         logger.warn(`[报告发送] 群 ${groupId} ${date} 报告不存在，跳过发送`)
         return { success: false, error: 'report_not_found' }
       }
+
+      // 验证报告数据的群 ID 是否匹配
+      if (report.groupId && report.groupId !== groupId) {
+        logger.error(`[报告发送] 数据不匹配！期望群 ${groupId}，但获取到群 ${report.groupId} 的报告`)
+        return { success: false, error: 'report_mismatch' }
+      }
+
+      logger.debug(`[报告发送] 群 ${groupId} 报告数据验证通过，消息数: ${report.stats?.basic?.totalMessages || 'unknown'}`)
 
       // 使用 Bot.pickGroup 自动选择正确的适配器
       // 这个方法会遍历所有 Bot 找到包含该群的 Bot
@@ -527,7 +536,8 @@ export class ReportPlugin extends plugin {
     const scheduleConfig = config?.schedule || {}
     const sendConfig = scheduleConfig.send || {}
     const whitelist = scheduleConfig.whitelist || []
-    const concurrency = scheduleConfig.concurrency || 3
+    // 串行执行避免并发渲染bug
+    const concurrency = 1
 
     // 检查是否启用
     if (!scheduleConfig.enabled || whitelist.length === 0) {
@@ -544,7 +554,7 @@ export class ReportPlugin extends plugin {
     const targetDate = moment().subtract(1, 'days').format('YYYY-MM-DD')
     logger.mark(`[报告发送] 开始执行定时发送任务 (目标日期: ${targetDate}, 白名单群数: ${whitelist.length})`)
 
-    // 使用并发限制处理白名单群
+    // 串行处理避免并发渲染导致的数据混淆
     const results = await this.runWithConcurrency(
       whitelist,
       async (groupId) => {
