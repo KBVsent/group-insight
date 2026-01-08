@@ -24,6 +24,7 @@ export default class MessageCollector {
     this.collectLinks = msgConfig.collectLinks !== undefined ? msgConfig.collectLinks : true
     this.collectVideos = msgConfig.collectVideos !== undefined ? msgConfig.collectVideos : true
     this.contextMessageCount = config.contextMessageCount || 1  // 新增: 上下文消息数量
+    this.nicknameMode = msgConfig.nicknameMode || 'card'
 
     // 定时总结白名单配置
     this.scheduleConfig = config.schedule || {}
@@ -33,7 +34,7 @@ export default class MessageCollector {
     this.isCollecting = false
     this.handler = null  // 保存处理器引用，用于移除监听器
 
-    logger.debug(`消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 收集链接: ${this.collectLinks}, 收集视频: ${this.collectVideos}, 上下文消息: ${this.contextMessageCount}`)
+    logger.debug(`消息收集配置 - 收集图片: ${this.collectImages}, 收集表情: ${this.collectFaces}, 收集链接: ${this.collectLinks}, 收集视频: ${this.collectVideos}, 上下文消息: ${this.contextMessageCount}, 昵称模式: ${this.nicknameMode}`)
     if (this.whitelist.length > 0) {
       logger.debug(`定时总结白名单: ${this.whitelist.length} 个群`)
     }
@@ -359,7 +360,7 @@ export default class MessageCollector {
 
     const messageData = {
       user_id: e.user_id,
-      nickname: e.sender.nickname || e.nickname,
+      nickname: this.nicknameMode === 'card' ? e.sender.card : e.sender.nickname,
       message: messageText,
       time: e.time,
       timestamp: Date.now(),
@@ -443,7 +444,7 @@ export default class MessageCollector {
     for (const userId of atUsers) {
       const atData = {
         user_id: e.user_id,
-        nickname: e.sender.nickname || e.nickname,
+        nickname: this.nicknameMode === 'card' ? e.sender.card : e.sender.nickname,
         message: message.text,
         images: message.images,
         faces: message.faces,

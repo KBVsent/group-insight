@@ -43,5 +43,17 @@ export default [
       max: 5000,
       placeholder: "请输入最大长度 (50-5000字符)"
     }
+  },
+  {
+    field: "groupManager.messageCollection.nicknameMode",
+    label: "昵称显示模式",
+    helpMessage: "选择群聊报告中显示的用户昵称来源",
+    component: "RadioGroup",
+    componentProps: {
+      options: [
+        { label: "群名片优先", value: "card" },
+        { label: "QQ昵称", value: "nickname" }
+      ]
+    }
   }
 ]
