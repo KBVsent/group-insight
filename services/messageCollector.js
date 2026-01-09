@@ -24,7 +24,7 @@ export default class MessageCollector {
     this.collectLinks = msgConfig.collectLinks !== undefined ? msgConfig.collectLinks : true
     this.collectVideos = msgConfig.collectVideos !== undefined ? msgConfig.collectVideos : true
     this.contextMessageCount = config.contextMessageCount || 1  // 新增: 上下文消息数量
-    this.nicknameMode = msgConfig.nicknameMode || 'card'
+    this.nicknameMode = msgConfig.nicknameMode || 'nickname'
 
     // 定时总结白名单配置
     this.scheduleConfig = config.schedule || {}
@@ -360,7 +360,7 @@ export default class MessageCollector {
 
     const messageData = {
       user_id: e.user_id,
-      nickname: this.nicknameMode === 'card' ? e.sender.card : e.sender.nickname,
+      nickname: this.nicknameMode === 'card' ? (e.sender.card || e.sender.nickname) : e.sender.nickname,
       message: messageText,
       time: e.time,
       timestamp: Date.now(),
@@ -444,7 +444,7 @@ export default class MessageCollector {
     for (const userId of atUsers) {
       const atData = {
         user_id: e.user_id,
-        nickname: this.nicknameMode === 'card' ? e.sender.card : e.sender.nickname,
+        nickname: this.nicknameMode === 'card' ? (e.sender.card || e.sender.nickname) : e.sender.nickname,
         message: message.text,
         images: message.images,
         faces: message.faces,
