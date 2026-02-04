@@ -219,24 +219,7 @@ export class ReportPlugin extends plugin {
   }
 
   /**
-   * 检查报告是否正在生成中（防止并发重复生成）
-   * @param {number} groupId - 群号
-   * @param {string} date - 日期
-   * @returns {Promise<boolean>} 是否正在生成
-   */
-  async isGenerating(groupId, date) {
-    try {
-      const lockKey = `Yz:groupManager:generating:${groupId}:${date}`
-      const lockValue = await redis.get(lockKey)
-      return !!lockValue
-    } catch (err) {
-      logger.error(`[报告] 检查生成锁失败: ${err}`)
-      return false
-    }
-  }
-
-  /**
-   * 设置生成锁（开始生成前调用）
+   * 获取生成锁（开始生成前调用）
    * @param {number} groupId - 群号
    * @param {string} date - 日期
    * @param {number} ttl - 锁超时时间（秒），默认5分钟
@@ -316,16 +299,10 @@ export class ReportPlugin extends plugin {
             return { groupId, status: 'skipped', reason: 'insufficient_messages' }
           }
 
-          // 检查是否正在生成中（避免与用户手动触发冲突）
-          if (await this.isGenerating(groupId, targetDate)) {
-            logger.info(`[报告] 群 ${groupId} ${targetDate} 报告正在生成中，跳过定时任务`)
-            return { groupId, status: 'skipped', reason: 'already_generating' }
-          }
-
           // 尝试获取生成锁
           if (!await this.acquireGeneratingLock(groupId, targetDate)) {
-            logger.info(`[报告] 群 ${groupId} ${targetDate} 获取锁失败，跳过定时任务`)
-            return { groupId, status: 'skipped', reason: 'lock_failed' }
+            logger.info(`[报告] 群 ${groupId} ${targetDate} 报告正在生成中，跳过定时任务`)
+            return { groupId, status: 'skipped', reason: 'already_generating' }
           }
 
           try {
@@ -659,11 +636,6 @@ export class ReportPlugin extends plugin {
           return this.reply('今天还没有消息，无法生成报告', true)
         }
 
-        // 检查是否正在生成中（防止并发重复生成）
-        if (await this.isGenerating(e.group_id, queryDate)) {
-          return this.reply('报告正在生成中，请稍后再试', true)
-        }
-
         // 尝试获取生成锁
         if (!await this.acquireGeneratingLock(e.group_id, queryDate)) {
           return this.reply('报告正在生成中，请稍后再试', true)
@@ -752,11 +724,6 @@ export class ReportPlugin extends plugin {
 
       // 无缓存或差异过大 → 生成报告
       // 历史日期不检查冷却，因为生成后即为定型报告，再次触发会直接使用缓存
-
-      // 检查是否正在生成中（防止并发重复生成）
-      if (await this.isGenerating(e.group_id, queryDate)) {
-        return this.reply('报告正在生成中，请稍后再试', true)
-      }
 
       // 尝试获取生成锁
       if (!await this.acquireGeneratingLock(e.group_id, queryDate)) {
@@ -894,12 +861,7 @@ export class ReportPlugin extends plugin {
         return this.reply(`${dateLabel}还没有消息，无法生成报告`, true)
       }
 
-      // 检查是否正在生成中（即使主人也需等待当前生成完成）
-      if (await this.isGenerating(e.group_id, targetDate)) {
-        return this.reply('该日期的报告正在生成中，请稍后再试', true)
-      }
-
-      // 尝试获取生成锁
+      // 尝试获取生成锁（即使主人也需等待当前生成完成）
       if (!await this.acquireGeneratingLock(e.group_id, targetDate)) {
         return this.reply('该日期的报告正在生成中，请稍后再试', true)
       }
