@@ -607,6 +607,43 @@ body {
     opacity: 0.8;
 }
 
+/* 用户胶囊组件 (inline avatar + name for topic detail) */
+.user-capsule {
+    display: inline-flex;
+    align-items: center;
+    background: var(--color-yellow);
+    border-radius: 12px;
+    padding: 2px 8px 2px 2px;
+    margin: 0 4px;
+    font-size: inherit;
+    line-height: inherit;
+    vertical-align: middle;
+    white-space: nowrap;
+    border: 1px dashed var(--ink-secondary);
+    transition: background 0.2s ease;
+}
+
+.user-capsule:hover {
+    background: var(--color-pink);
+}
+
+.user-capsule-avatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    margin-right: 6px;
+    object-fit: cover;
+    border: 1px solid var(--ink-secondary);
+    background: #ffffff;
+    flex-shrink: 0;
+}
+
+.user-capsule-name {
+    color: var(--ink-primary);
+    font-weight: 500;
+    font-family: var(--font-hand);
+}
+
 @media (max-width: 768px) {
     .grid-layout {
         display: flex;

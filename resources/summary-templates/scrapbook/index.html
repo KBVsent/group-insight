@@ -122,7 +122,7 @@
                             🙋‍♀️ 参与者: {{each topic.contributors contributor contributorIndex}}{{if contributorIndex > 0}}、{{/if}}{{contributor.nickname}}{{/each}}
                         </div>
                         {{/if}}
-                        <div class="topic-detail">{{topic.detail}}</div>
+                        <div class="topic-detail">{{@ topic.detail}}</div>
                     </div>
                 </div>
                 {{/each}}

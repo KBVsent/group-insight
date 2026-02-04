@@ -131,20 +131,20 @@ export default class BaseAnalyzer {
   }
 
   /**
-   * 格式化消息列表为文本
+   * 格式化消息列表为文本（使用 user_id 代替昵称）
    * @param {Array} messages - 消息列表
    * @param {Object} options - 格式化选项
-   * @returns {string} 格式化后的文本
+   * @returns {Object} { text: 格式化文本, userMap: user_id→nickname映射 }
    */
   formatMessages(messages, options = {}) {
     const {
       includeTime = true,
-      includeNickname = true,
       maxMessages = null,
       filter = null
     } = options
 
-    let formatted = []
+    const formatted = []
+    const userMap = new Map()
     let processedCount = 0
 
     for (const msg of messages) {
@@ -158,6 +158,9 @@ export default class BaseAnalyzer {
         break
       }
 
+      // 收集 user_id → nickname 映射（保留最新的昵称）
+      userMap.set(String(msg.user_id), msg.nickname)
+
       let line = ''
 
       // 添加时间
@@ -167,10 +170,8 @@ export default class BaseAnalyzer {
         line += `[${timeStr}] `
       }
 
-      // 添加昵称
-      if (includeNickname) {
-        line += `${msg.nickname}: `
-      }
+      // 使用 user_id 代替昵称（确保 AI 输出可精确匹配）
+      line += `[${msg.user_id}]: `
 
       // 添加消息内容
       line += msg.message
@@ -198,7 +199,7 @@ export default class BaseAnalyzer {
       processedCount++
     }
 
-    return formatted.join('\n')
+    return { text: formatted.join('\n'), userMap }
   }
 
   /**

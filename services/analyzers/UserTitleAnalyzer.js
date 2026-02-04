@@ -37,8 +37,14 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
 
     logger.info(`[UserTitleAnalyzer] 分析 ${activeUsers.length} 位活跃用户`)
 
-    // 构建用户行为描述
+    // 构建用户行为描述（包含 user_id）
     const userDescriptions = this.buildUserDescriptions(activeUsers)
+
+    // 构建 user_id → nickname 映射表
+    const userIdToNickname = new Map()
+    for (const desc of userDescriptions) {
+      userIdToNickname.set(String(desc.user_id), desc.nickname)
+    }
 
     // 构建提示词
     const prompt = this.buildPrompt(userDescriptions)
@@ -59,22 +65,20 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
       return { userTitles: [], usage: result.usage || null }
     }
 
-    // 创建昵称到 user_id 的映射表
-    const nicknameToUserId = new Map()
-    for (const desc of userDescriptions) {
-      nicknameToUserId.set(desc.nickname, desc.user_id)
-    }
-
-    // 验证和清理数据，同时添加 user_id
+    // 验证和清理数据，使用 user_id 直接匹配昵称
     const validTitles = titles
-      .filter(title => title && title.user && title.title && title.mbti && title.reason)
-      .map(title => ({
-        user: title.user.trim(),
-        user_id: nicknameToUserId.get(title.user.trim()) || null,  // 添加 user_id
-        title: title.title.trim(),
-        mbti: title.mbti.trim().toUpperCase(),
-        reason: title.reason.trim()
-      }))
+      .filter(title => title && title.user_id && title.title && title.mbti && title.reason)
+      .map(title => {
+        const userIdStr = String(title.user_id).trim()
+        const nickname = userIdToNickname.get(userIdStr) || userIdStr // 如果找不到，使用原值
+        return {
+          user: nickname,
+          user_id: userIdToNickname.has(userIdStr) ? userIdStr : null,
+          title: title.title.trim(),
+          mbti: title.mbti.trim().toUpperCase(),
+          reason: title.reason.trim()
+        }
+      })
       .slice(0, this.maxTitles)
 
     logger.info(`[UserTitleAnalyzer] 生成 ${validTitles.length} 个用户称号`)
@@ -97,7 +101,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
       const sharer = parseFloat(user.shareRatio) > 0.1
 
       return {
-        user_id: user.user_id,  // 保留 user_id 用于后续获取头像
+        user_id: user.user_id,
         nickname: user.nickname,
         messageCount: user.messageCount,
         avgLength: user.avgLength,
@@ -127,7 +131,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
   buildPrompt(userDescriptions) {
     const userText = userDescriptions
       .map((user, i) => {
-        return `${i + 1}. ${user.nickname}
+        return `${i + 1}. 用户ID: ${user.user_id}
    - 消息数: ${user.messageCount} 条
    - 平均长度: ${user.avgLength} 字
    - 表情使用率: ${user.emojiRatio}
@@ -177,17 +181,18 @@ ${userText}
 请选择最多 ${this.maxTitles} 位最有特色的用户,为他们分配称号和 MBTI,并简要说明理由。
 
 **重要：你必须只返回一个 JSON 数组，不要包含任何说明文字、代码块标记或其他内容。直接输出 JSON，从 [ 开始，以 ] 结束。**
+**重要：user_id 字段必须填写用户ID（纯数字），不要填写昵称！**
 
 返回格式（直接输出，不要用 \`\`\`json 包裹）:
 [
   {
-    "user": "用户昵称",
+    "user_id": "用户ID（如 123456789，必须是纯数字）",
     "title": "创意称号",
     "mbti": "MBTI类型",
     "reason": "授予理由 (30字内,说明为什么给这个称号和MBTI)"
   },
   {
-    "user": "另一个用户",
+    "user_id": "另一个用户的用户ID",
     "title": "另一个称号",
     "mbti": "另一个MBTI",
     "reason": "授予理由..."

@@ -61,10 +61,9 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
 
     logger.info(`[GoldenQuoteAnalyzer] 过滤后剩余 ${filteredMessages.length} 条消息`)
 
-    // 格式化消息
-    const formattedMessages = this.formatMessages(filteredMessages, {
-      includeTime: false,
-      includeNickname: true
+    // 格式化消息（返回 { text, userMap }）
+    const { text: formattedMessages, userMap } = this.formatMessages(filteredMessages, {
+      includeTime: false
     })
 
     // 构建提示词
@@ -86,25 +85,21 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
       return { goldenQuotes: [], usage: result.usage || null }
     }
 
-    // 创建昵称到 user_id 的映射表
-    const nicknameToUserId = new Map()
-    if (stats && stats.users) {
-      for (const user of stats.users) {
-        nicknameToUserId.set(user.nickname, user.user_id)
-      }
-    }
-
-    // 验证和清理数据，同时添加 user_id
+    // 验证和清理数据，使用 user_id 直接匹配昵称
     const validQuotes = quotes
       .filter(quote => quote && quote.quote && quote.sender && quote.reason)
-      .map(quote => ({
-        quote: quote.quote.trim(),
-        sender: {
-          nickname: quote.sender.trim(),
-          user_id: nicknameToUserId.get(quote.sender.trim()) || null
-        },
-        reason: quote.reason.trim()
-      }))
+      .map(quote => {
+        const senderId = String(quote.sender).trim()
+        const nickname = userMap.get(senderId) || senderId // 如果找不到，使用原值
+        return {
+          quote: quote.quote.trim(),
+          sender: {
+            user_id: userMap.has(senderId) ? senderId : null,
+            nickname
+          },
+          reason: quote.reason.trim()
+        }
+      })
       .slice(0, this.maxQuotes)
 
     logger.info(`[GoldenQuoteAnalyzer] 提取到 ${validQuotes.length} 条金句`)
@@ -133,7 +128,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
 - 每条金句要说明为什么选择它 (理由简洁,20字内)
 - 如果实在没有符合标准的语句,可以返回空数组 []
 
-群聊记录格式: 昵称: 消息内容
+群聊记录格式: [用户ID]: 消息内容
 
 群聊记录:
 ${formattedMessages}
@@ -141,17 +136,18 @@ ${formattedMessages}
 ---
 
 **重要：你必须只返回一个 JSON 数组，不要包含任何说明文字、代码块标记或其他内容。直接输出 JSON，从 [ 开始，以 ] 结束。**
+**重要：sender 字段必须填写用户ID（纯数字），不要填写昵称！**
 
 返回格式（直接输出，不要用 \`\`\`json 包裹）:
 [
   {
     "quote": "金句内容",
-    "sender": "发言人昵称",
+    "sender": "用户ID（如 123456789，必须是纯数字）",
     "reason": "选择理由 (简短说明为什么这句话有价值)"
   },
   {
     "quote": "另一条金句",
-    "sender": "另一个发言人",
+    "sender": "另一个发言人的用户ID",
     "reason": "选择理由..."
   }
 ]`
