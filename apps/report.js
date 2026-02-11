@@ -661,7 +661,8 @@ export class ReportPlugin extends plugin {
       const params = await this.parseReportParams(e, /群聊(?:总结|报告)\s*(\d{5,12})?\s*(今天|昨天|前天|\d{4}-\d{2}-\d{2})?/)
       if (!params) return
 
-      const { targetGroupId, queryDate, dateLabel, isToday, groupName } = params
+      const { targetGroupId, queryDate, dateLabel, isToday, isRemote, groupName } = params
+      const groupHint = isRemote ? ` [${groupName}]` : ''
 
       // 从 Redis 获取指定日期的报告
       let report = await messageCollector.redisHelper.getReport(targetGroupId, queryDate)
@@ -703,7 +704,7 @@ export class ReportPlugin extends plugin {
         }
 
         try {
-          await this.reply(`正在生成今天的群聊报告（${messages.length}条消息），请稍候...`)
+          await this.reply(`正在生成今天的群聊报告${groupHint}（${messages.length}条消息），请稍候...`)
 
           logger.info(`[报告] 用户 ${e.user_id} 触发生成群 ${targetGroupId} (${groupName}) 的今天报告 (消息数: ${messages.length})`)
 
@@ -792,7 +793,7 @@ export class ReportPlugin extends plugin {
       }
 
       try {
-        await this.reply(`正在生成${dateLabel}的群聊报告（${messages.length}条消息），请稍候...`)
+        await this.reply(`正在生成${dateLabel}的群聊报告${groupHint}（${messages.length}条消息），请稍候...`)
 
         logger.info(`[报告] 用户 ${e.user_id} 触发生成群 ${targetGroupId} (${groupName}) 的${dateLabel}报告 (消息数: ${messages.length})`)
 
@@ -892,9 +893,10 @@ export class ReportPlugin extends plugin {
       const params = await this.parseReportParams(e, /强制生成报告\s*(\d{5,12})?\s*(今天|昨天|前天|\d{4}-\d{2}-\d{2})?/)
       if (!params) return // Permission denied or invalid params, already replied
 
-      const { targetGroupId, queryDate: targetDate, dateLabel, groupName } = params
+      const { targetGroupId, queryDate: targetDate, dateLabel, isRemote, groupName } = params
+      const groupHint = isRemote ? ` [${groupName}]` : ''
 
-      await this.reply(`正在强制生成${dateLabel}的群聊报告，请稍候...`)
+      await this.reply(`正在强制生成${dateLabel}的群聊报告${groupHint}，请稍候...`)
 
       // 获取指定日期的消息（直接传入目标日期）
       const messages = await messageCollector.getMessages(targetGroupId, 1, targetDate)
