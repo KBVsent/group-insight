@@ -747,16 +747,38 @@ export class ReportPlugin extends plugin {
       }
 
       // ===== 历史报告逻辑 =====
-      // 历史日期：检查缓存消息数与当前消息数的差异
+      // 保留期内：消息还在，可以比较差异、按需重新生成
+      // 保留期外：消息已过期，只能查询已缓存的报告
 
-      // 先获取消息数量
       const messages = await messageCollector.getMessages(targetGroupId, 1, queryDate)
+      const config = Config.get()
+      const retentionDays = config?.retentionDays || 7
+      const daysSinceQuery = moment().startOf('day').diff(moment(queryDate, 'YYYY-MM-DD').startOf('day'), 'days')
+      const isWithinRetention = daysSinceQuery < retentionDays
 
       if (messages.length === 0) {
-        return this.reply(`${dateLabel}没有消息记录（可能已过期或未收集）`, true)
+        // 消息已过期或未收集，检查是否有已缓存的报告
+        if (report) {
+          logger.info(`[报告] 用户 ${e.user_id} 查询群 ${targetGroupId} 的${dateLabel}报告（消息已过期，返回缓存报告）`)
+
+          const img = await this.renderReport(report, {
+            groupName,
+            model: aiService?.model || '',
+            tokenUsage: report.tokenUsage,
+            date: queryDate
+          })
+
+          if (img) {
+            return this.reply(img)
+          } else {
+            return this.sendTextSummary(report, dateLabel, queryDate)
+          }
+        }
+
+        return this.reply(`${dateLabel}没有消息记录${isWithinRetention ? '（未收集到消息）' : '（消息已过期且无缓存报告）'}`, true)
       }
 
-      // 如果有缓存，检查消息数差异
+      // 消息存在（保留期内），检查缓存差异决定是否重新生成
       if (report) {
         const cachedMessageCount = report.messageCount || 0
         const currentMessageCount = messages.length
