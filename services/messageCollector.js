@@ -87,6 +87,15 @@ export default class MessageCollector {
   }
 
   /**
+   * 判断是否为机器人账号（3889开头的10位数字）
+   * @param {string|number} userId - 用户ID
+   * @returns {boolean}
+   */
+  isBotAccount(userId) {
+    return /^3889\d{6}$/.test(String(userId))
+  }
+
+  /**
    * 处理群消息
    * @param {object} e - 事件对象
    */
@@ -96,7 +105,12 @@ export default class MessageCollector {
       logger.debug(`已过滤QQ官方Bot消息 (adapter: QQBot)`)
       return
     }
-    
+
+    // 过滤机器人账号（3889开头的10位数字）
+    if (this.isBotAccount(e.user_id)) {
+      return
+    }
+
     // 提取消息内容
     const message = this.extractMessage(e)
 
