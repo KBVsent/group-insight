@@ -12,7 +12,6 @@ export default class AIService {
     this.model = config.model || 'gpt-4.1'
     this.baseURL = config.baseURL || 'https://api.openai.com/v1'
     this.timeout = config.timeout || 60000
-    this.maxTokens = config.maxTokens || 2000
     this.client = null
     this.initialized = false
   }
@@ -56,12 +55,11 @@ export default class AIService {
   /**
    * 通用聊天接口 (供分析器使用)
    * @param {string} prompt - 提示词
-   * @param {number} maxTokens - 最大 Token 数
    * @param {number} temperature - 温度参数
    * @param {number} timeout - 超时时间 (秒)
    * @returns {Promise<Object>} 返回 { content, usage }
    */
-  async chat(prompt, maxTokens = 2000, temperature = 0.7, timeout = 100) {
+  async chat(prompt, temperature = 0.7, timeout = 100) {
     if (!this.client) {
       const initialized = await this.init()
       if (!initialized) {
@@ -79,7 +77,7 @@ export default class AIService {
       })
 
       // 创建请求 Promise
-      const requestPromise = this._makeRequest(prompt, maxTokens, temperature)
+      const requestPromise = this._makeRequest(prompt, temperature)
 
       // 使用 Promise.race 实现超时控制
       const result = await Promise.race([requestPromise, timeoutPromise])
@@ -97,12 +95,13 @@ export default class AIService {
 
   /**
    * 执行实际的 AI 请求（内部方法）
+   * 不传 max_tokens，交由服务商的默认上限控制：
+   * 思考模型的推理 token 同样计入该上限，人为设值会把正文挤空
    * @private
    */
-  async _makeRequest(prompt, maxTokens, temperature) {
+  async _makeRequest(prompt, temperature) {
     const response = await this.client.chat.completions.create({
       model: this.model,
-      max_tokens: maxTokens,
       temperature,
       messages: [{
         role: 'user',
@@ -110,11 +109,24 @@ export default class AIService {
       }]
     })
 
-    const content = response.choices[0].message.content
+    const choice = response.choices?.[0]
+    const content = choice?.message?.content
     const usage = {
       prompt_tokens: response.usage?.prompt_tokens || 0,
       completion_tokens: response.usage?.completion_tokens || 0,
       total_tokens: response.usage?.total_tokens || 0
+    }
+
+    if (!content) {
+      // 区分「被截断」和「真的没返回」，否则两种故障都报成内容为空
+      if (choice?.finish_reason === 'length') {
+        const reasoningTokens = response.usage?.completion_tokens_details?.reasoning_tokens
+        throw new Error(
+          `AI 响应被截断 (finish_reason=length)，已消耗 ${usage.completion_tokens} tokens` +
+          `${reasoningTokens ? `（其中推理 ${reasoningTokens}）` : ''}，请提高服务商侧的输出长度上限`
+        )
+      }
+      throw new Error(`AI 返回内容为空 (finish_reason=${choice?.finish_reason ?? 'unknown'})`)
     }
 
     return { content, usage }

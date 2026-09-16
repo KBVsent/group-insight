@@ -50,7 +50,7 @@ export default class UserTitleAnalyzer extends BaseAnalyzer {
     const prompt = this.buildPrompt(userDescriptions)
 
     // 调用 AI
-    const result = await this.callAI(prompt, 2500, 0.9)
+    const result = await this.callAI(prompt, 0.9)
 
     if (!result || !result.content) {
       logger.error('[UserTitleAnalyzer] AI 调用失败')

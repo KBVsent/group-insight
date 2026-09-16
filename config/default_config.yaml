@@ -32,8 +32,6 @@ groupManager:
     # 超时时间（毫秒）
     timeout: 60000
 
-    # 最大 Token 数
-    maxTokens: 20000
 
     # 每次总结最多处理的消息数量
     maxMessages: 1000

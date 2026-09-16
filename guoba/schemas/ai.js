@@ -44,18 +44,6 @@ export default [
     }
   },
   {
-    field: "groupManager.ai.maxTokens",
-    label: "最大 Token 数",
-    helpMessage: "AI 响应的最大 Token 数量",
-    component: "InputNumber",
-    componentProps: {
-      min: 1000,
-      max: 100000,
-      step: 1000,
-      placeholder: "请输入最大 Token 数"
-    }
-  },
-  {
     field: "groupManager.ai.maxMessages",
     label: "最大消息处理数",
     helpMessage: "每次总结最多处理的消息数量",

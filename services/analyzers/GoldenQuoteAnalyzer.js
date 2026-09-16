@@ -70,7 +70,7 @@ export default class GoldenQuoteAnalyzer extends BaseAnalyzer {
     const prompt = this.buildPrompt(formattedMessages)
 
     // 调用 AI
-    const result = await this.callAI(prompt, 1500, 0.8)
+    const result = await this.callAI(prompt, 0.8)
 
     if (!result || !result.content) {
       logger.error('[GoldenQuoteAnalyzer] AI 调用失败')

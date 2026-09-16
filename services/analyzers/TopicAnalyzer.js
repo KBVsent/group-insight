@@ -33,7 +33,7 @@ export default class TopicAnalyzer extends BaseAnalyzer {
     const prompt = this.buildPrompt(formattedMessages)
 
     // 调用 AI
-    const result = await this.callAI(prompt, 2000, 0.7)
+    const result = await this.callAI(prompt, 0.7)
 
     if (!result || !result.content) {
       logger.error('[TopicAnalyzer] AI 调用失败')

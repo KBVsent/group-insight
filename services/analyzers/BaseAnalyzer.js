@@ -18,18 +18,17 @@ export default class BaseAnalyzer {
   /**
    * 调用 AI 进行分析 (带重试)
    * @param {string} prompt - 提示词
-   * @param {number} maxTokens - 最大 token 数
    * @param {number} temperature - 温度参数
    * @returns {Promise<Object>} AI 响应结果
    */
-  async callAI(prompt, maxTokens = 2000, temperature = 0.7) {
+  async callAI(prompt, temperature = 0.7) {
     let lastError = null
 
     for (let attempt = 1; attempt <= this.retries + 1; attempt++) {
       try {
         logger.debug(`[${this.constructor.name}] AI 调用 - 尝试 ${attempt}/${this.retries + 1}`)
 
-        const result = await this.aiService.chat(prompt, maxTokens, temperature, this.timeout)
+        const result = await this.aiService.chat(prompt, temperature, this.timeout)
 
         if (result && result.content) {
           logger.info(`[${this.constructor.name}] AI 调用成功 - Tokens: ${result.usage?.total_tokens || 'N/A'}`)
